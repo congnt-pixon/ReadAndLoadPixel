@@ -365,6 +365,44 @@ let paintMode = false;
 let isPainting = false;
 let lastPaintedKey = null;
 
+// Undo stack — mỗi entry là 1 stroke
+const undoStack = [];
+const MAX_UNDO = 50;
+let currentStroke = null; // { changedCells: Map<key, oldType>, typesBefore: Map }
+
+function snapshotTypes() {
+  return new Map([...State.types].map(([t, info]) => [t, { ...info }]));
+}
+
+function startStroke() {
+  currentStroke = { changedCells: new Map(), typesBefore: snapshotTypes() };
+}
+
+function commitStroke() {
+  if (currentStroke && currentStroke.changedCells.size > 0) {
+    undoStack.push(currentStroke);
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+  }
+  currentStroke = null;
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  const stroke = undoStack.pop();
+  State.types = stroke.typesBefore;
+  for (const [key, oldType] of stroke.changedCells) {
+    const [x, y] = key.split(',').map(Number);
+    const cell = State.cells.find(c => c.x === x && c.y === y);
+    if (cell) cell.type = oldType;
+  }
+  buildTypeList();
+  renderMap();
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+});
+
 function getPaintColor() { return document.getElementById('paint-color').value; }
 
 function getOrCreateTypeForColor(color) {
@@ -397,14 +435,16 @@ function paintCell(clientX, clientY) {
 
   const cell = State.cells.find(c => c.x === cx && c.y === cy);
   if (cell) {
-    // Giảm count type cũ
+    // Ghi lại trạng thái cũ cho undo (chỉ lần đầu trong stroke này)
+    if (currentStroke && !currentStroke.changedCells.has(key)) {
+      currentStroke.changedCells.set(key, cell.type);
+    }
     const oldInfo = State.types.get(cell.type);
     if (oldInfo && oldInfo.count > 0) oldInfo.count--;
-    // Tăng count type mới
     State.types.get(typeId).count++;
     cell.type = typeId;
   }
-  State.cellOverrides.delete(key); // không cần override nữa vì đã là type
+  State.cellOverrides.delete(key);
   buildTypeList();
   renderMap();
 }
@@ -432,13 +472,18 @@ mapCanvas.addEventListener('mousedown', e => {
   e.preventDefault();
   isPainting = true;
   lastPaintedKey = null;
+  startStroke();
   paintCell(e.clientX, e.clientY);
 });
 mapCanvas.addEventListener('mousemove', e => {
   if (!paintMode || !isPainting) return;
   paintCell(e.clientX, e.clientY);
 });
-document.addEventListener('mouseup', () => { isPainting = false; lastPaintedKey = null; });
+document.addEventListener('mouseup', () => {
+  if (isPainting) commitStroke();
+  isPainting = false;
+  lastPaintedKey = null;
+});
 
 // ============================================================
 // Cell click — per-cell color edit (chỉ khi không ở paint mode)
