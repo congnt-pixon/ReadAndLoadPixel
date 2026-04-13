@@ -33,6 +33,7 @@
     .btn-danger:hover { background:#991b1b; }
     .btn-success { background:#065f46; color:#6ee7b7; }
     .btn-success:hover { background:#047857; }
+    .btn-sm { padding:3px 9px; font-size:0.68rem; }
 
     #parse-status { font-size:0.7rem; padding:4px 8px; border-radius:4px; display:none; }
     #parse-status.err { background:#3a1e1e; color:#f87171; }
@@ -51,6 +52,8 @@
     .type-color-picker { width:32px; height:28px; border:none; border-radius:4px; cursor:pointer; padding:1px; background:transparent; flex-shrink:0; }
     .type-hex-label { font-size:0.68rem; color:#9ca3af; flex:1; }
     .type-count { font-size:0.63rem; color:#6b6b8a; }
+    .type-map-select { font-size:0.63rem; background:#0d0d1f; color:#c4b5fd; border:1px solid #3b3b5c; border-radius:4px; padding:1px 2px; max-width:78px; cursor:pointer; }
+    .type-arrow { font-size:0.6rem; color:#4b4b6a; }
 
     #map-controls { display:flex; flex-direction:column; gap:6px; padding-top:6px; border-top:1px solid #2d2d4e; }
     #cell-size-row { display:flex; align-items:center; gap:6px; font-size:0.72rem; color:#9ca3af; }
@@ -71,6 +74,13 @@
 
     #map-container { overflow:auto; flex:1; min-height:200px; border:1px solid #2d2d4e; border-radius:6px; background:repeating-conic-gradient(#1e1e30 0% 25%,#181828 0% 50%) 0 0 / 16px 16px; position:relative; cursor:crosshair; }
     #map-canvas { display:block; image-rendering:pixelated; }
+    #map-container.paint-active { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Ccircle cx='4' cy='16' r='3' fill='%23a78bfa'/%3E%3Crect x='3' y='4' width='2' height='10' fill='%23c4b5fd'/%3E%3Cpolygon points='2,4 6,4 5,1 3,1' fill='%23e9d5ff'/%3E%3C/svg%3E") 4 16, crosshair; }
+    #paint-toolbar { display:none; align-items:center; gap:8px; background:#12122a; border:1px solid #2d2d4e; border-radius:7px; padding:6px 10px; flex-wrap:wrap; }
+    #paint-toolbar.visible { display:flex; }
+    #btn-paint-mode { transition: background 0.15s; }
+    #btn-paint-mode.active { background:#7c3aed !important; color:#fff !important; box-shadow:0 0 8px #7c3aed88; }
+    #paint-color-wrap { display:flex; align-items:center; gap:6px; font-size:0.7rem; color:#9ca3af; }
+    #paint-color { width:36px; height:28px; border:none; border-radius:4px; cursor:pointer; padding:1px; background:transparent; }
 
     /* Floating cell color picker */
     #cell-picker-wrap {
@@ -131,13 +141,9 @@
         <button class="btn btn-danger"  id="btn-clear-overrides" style="width:100%;">&#10006; Clear Cell Edits</button>
         <button class="btn btn-success" id="btn-export-img"      style="width:100%;">&#8659; Export PNG</button>
         <div style="border-top:1px solid #2d2d4e;padding-top:8px;display:flex;flex-direction:column;gap:6px;">
-          <div style="font-size:0.72rem;color:#a78bfa;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Group by Color</div>
-          <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:#9ca3af;">
-            Tol:
-            <input type="range" id="group-tolerance" min="0" max="100" value="10" style="flex:1;accent-color:#7c3aed;">
-            <span id="group-tol-val" style="color:#a78bfa;min-width:24px;text-align:right;">10</span>
-          </div>
-          <button class="btn btn-primary" id="btn-group" style="width:100%;">&#10010; Group &amp; Save JSON</button>
+          <div style="font-size:0.72rem;color:#a78bfa;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Gán type thủ công</div>
+          <div style="font-size:0.65rem;color:#6b6b8a;">Mỗi dòng: chọn palette type muốn gán</div>
+          <button class="btn btn-primary" id="btn-apply-group" style="width:100%;">&#10003; Apply &amp; Save JSON</button>
           <span id="group-status" style="font-size:0.68rem;color:#4ade80;display:none;"></span>
         </div>
       </div>
@@ -147,9 +153,18 @@
     <div id="map-panel">
       <div id="map-toolbar">
         <h3>Map</h3>
-        <span id="edit-hint">Click a cell to change its color</span>
+        <button class="btn btn-secondary btn-sm" id="btn-paint-mode">&#9998; Paint mode</button>
+        <span id="edit-hint" style="font-size:0.68rem;color:#6b6b8a;">Click ô để đổi màu</span>
         <span id="override-count" style="display:none"></span>
         <span id="map-info"></span>
+      </div>
+      <div id="paint-toolbar">
+        <span style="font-size:0.72rem;color:#a78bfa;font-weight:700;">🖌 Màu vẽ:</span>
+        <div id="paint-color-wrap">
+          <input type="color" id="paint-color" value="#ffffff">
+          <span id="paint-color-hex" style="color:#e0e0f0;font-size:0.72rem;min-width:54px;">#ffffff</span>
+        </div>
+        <span style="font-size:0.68rem;color:#6b6b8a;">← chọn màu rồi click/kéo lên bản đồ</span>
       </div>
       <div id="map-container">
         <canvas id="map-canvas"></canvas>
@@ -236,6 +251,20 @@ function showStatus(msg, isErr) {
 // ============================================================
 // Build type list
 // ============================================================
+// typeManualMap: typeNum -> targetPaletteType (user's manual selection)
+const typeManualMap = new Map();
+
+function buildPaletteOptions(selectedType) {
+  let opts = `<option value="-1"${selectedType === -1 ? ' selected' : ''}>— giữ nguyên —</option>`;
+  for (const [t, info] of [...State.types.entries()].sort((a,b) => a[0]-b[0])) {
+    const palName = PALETTE.find(p => p.type === t)?.name ?? 'custom';
+    const sel = t === selectedType ? ' selected' : '';
+    const colorBox = `&#9632;`;
+    opts += `<option value="${t}"${sel}>#${t} ${palName} ${colorBox}</option>`;
+  }
+  return opts;
+}
+
 function buildTypeList() {
   const list = document.getElementById('type-list');
   list.innerHTML = '';
@@ -257,7 +286,20 @@ function buildTypeList() {
     const countBadge = document.createElement('span');
     countBadge.className = 'type-count'; countBadge.textContent = `×${info.count}`;
 
-    row.appendChild(badge); row.appendChild(picker); row.appendChild(hexLabel); row.appendChild(countBadge);
+    // Manual mapping dropdown
+    const arrow = document.createElement('span');
+    arrow.className = 'type-arrow'; arrow.textContent = '→';
+
+    const sel = document.createElement('select');
+    sel.className = 'type-map-select';
+    const currentTarget = typeManualMap.has(typeNum) ? typeManualMap.get(typeNum) : -1;
+    sel.innerHTML = buildPaletteOptions(currentTarget);
+    sel.addEventListener('change', () => {
+      typeManualMap.set(typeNum, parseInt(sel.value));
+    });
+
+    row.appendChild(badge); row.appendChild(picker); row.appendChild(hexLabel);
+    row.appendChild(countBadge); row.appendChild(arrow); row.appendChild(sel);
     list.appendChild(row);
   }
 }
@@ -317,18 +359,101 @@ function updateOverrideCount() {
 }
 
 // ============================================================
-// Cell click — per-cell color edit
+// Paint mode
+// ============================================================
+let paintMode = false;
+let isPainting = false;
+let lastPaintedKey = null;
+
+function getPaintColor() { return document.getElementById('paint-color').value; }
+
+function getOrCreateTypeForColor(color) {
+  const c = color.toLowerCase();
+  // Tìm type đã có cùng màu
+  for (const [t, info] of State.types) {
+    if (info.color.toLowerCase() === c) return t;
+  }
+  // Tạo type mới ID >= 11
+  const newId = nextCustomTypeId();
+  State.types.set(newId, { count: 0, color: c });
+  return newId;
+}
+
+function paintCell(clientX, clientY) {
+  if (!State.cells.length) return;
+  const canvas = document.getElementById('map-canvas');
+  const cs = getCellSize();
+  const rect = canvas.getBoundingClientRect();
+  const cx  = Math.floor((clientX - rect.left) / cs);
+  const row = Math.floor((clientY - rect.top)  / cs);
+  if (cx < 0 || row < 0 || cx >= State.cols || row >= State.rows) return;
+  const cy = State.rows - 1 - row;
+  const key = `${cx},${cy}`;
+  if (key === lastPaintedKey) return;
+  lastPaintedKey = key;
+
+  const color = getPaintColor();
+  const typeId = getOrCreateTypeForColor(color);
+
+  const cell = State.cells.find(c => c.x === cx && c.y === cy);
+  if (cell) {
+    // Giảm count type cũ
+    const oldInfo = State.types.get(cell.type);
+    if (oldInfo && oldInfo.count > 0) oldInfo.count--;
+    // Tăng count type mới
+    State.types.get(typeId).count++;
+    cell.type = typeId;
+  }
+  State.cellOverrides.delete(key); // không cần override nữa vì đã là type
+  buildTypeList();
+  renderMap();
+}
+
+document.getElementById('btn-paint-mode').addEventListener('click', () => {
+  paintMode = !paintMode;
+  const btn = document.getElementById('btn-paint-mode');
+  const paintToolbar = document.getElementById('paint-toolbar');
+  const container = document.getElementById('map-container');
+  const hint = document.getElementById('edit-hint');
+  btn.classList.toggle('active', paintMode);
+  paintToolbar.classList.toggle('visible', paintMode);
+  container.classList.toggle('paint-active', paintMode);
+  hint.textContent = paintMode ? '🖌 Đang vẽ — nhấn Paint mode để tắt' : 'Click ô để đổi màu';
+  if (paintMode) closePicker();
+});
+
+document.getElementById('paint-color').addEventListener('input', e => {
+  document.getElementById('paint-color-hex').textContent = e.target.value;
+});
+
+const mapCanvas = document.getElementById('map-canvas');
+mapCanvas.addEventListener('mousedown', e => {
+  if (!paintMode) return;
+  e.preventDefault();
+  isPainting = true;
+  lastPaintedKey = null;
+  paintCell(e.clientX, e.clientY);
+});
+mapCanvas.addEventListener('mousemove', e => {
+  if (!paintMode || !isPainting) return;
+  paintCell(e.clientX, e.clientY);
+});
+document.addEventListener('mouseup', () => { isPainting = false; lastPaintedKey = null; });
+
+// ============================================================
+// Cell click — per-cell color edit (chỉ khi không ở paint mode)
 // ============================================================
 let activeCellKey = null;
 
 document.getElementById('map-canvas').addEventListener('click', e => {
+  if (paintMode) return; // paint mode tự xử lý
   if (!State.cells.length) return;
   const cs = getCellSize();
   const rect = e.target.getBoundingClientRect();
   const cx  = Math.floor((e.clientX - rect.left) / cs);
-  const row = Math.floor((e.clientY - rect.top)  / cs); // canvas row (0=top)
+  const row = Math.floor((e.clientY - rect.top)  / cs);
   if (cx < 0 || row < 0 || cx >= State.cols || row >= State.rows) return;
-  const cy = State.rows - 1 - row; // JSON y (0=bottom)
+  const cy = State.rows - 1 - row;
 
   const cell = State.cells.find(c => c.x === cx && c.y === cy);
   if (!cell) return;
@@ -343,7 +468,6 @@ document.getElementById('map-canvas').addEventListener('click', e => {
   input.value = currentColor;
   label.textContent = `(${cx},${cy}) type ${cell.type}`;
 
-  // Position near click, keep inside viewport
   const vw = window.innerWidth, vh = window.innerHeight;
   let left = e.clientX + 12, top = e.clientY + 12;
   wrap.classList.add('visible');
@@ -486,61 +610,57 @@ function nearestPalette(hex) {
 }
 
 // ============================================================
-// Group cells by similar color → rebuild types → export JSON
+// Apply manual type grouping → rebuild types → export JSON
 // ============================================================
-function groupByColor() {
+function applyManualGrouping() {
   if (!State.cells.length) return;
-  const tolerance = parseInt(document.getElementById('group-tolerance').value, 10) || 0;
-  const threshold = (tolerance / 100) * 441;
 
-  // Step 1: get effective color for every cell
-  const cellColors = State.cells.map(c => ({
-    x: c.x, y: c.y,
-    color: getEffectiveColor(c.x, c.y, c.type)
-  }));
-
-  // Step 2: cluster by color similarity (greedy, most-common-first)
-  const freq = new Map();
-  for (const { color } of cellColors) freq.set(color, (freq.get(color)||0)+1);
-  const sorted = [...new Set(cellColors.map(c=>c.color))].sort((a,b)=>(freq.get(b)||0)-(freq.get(a)||0));
-
-  const groups = []; // [{repColor, cells:[{x,y}]}]
-  const colorToGroup = new Map();
-
-  for (const color of sorted) {
-    let found = null;
-    for (const g of groups) { if (colorDist(color, g.repColor) <= threshold) { found = g; break; } }
-    if (found) colorToGroup.set(color, found);
-    else { const g = { repColor: color, cells: [] }; groups.push(g); colorToGroup.set(color, g); }
+  // Collect only mappings that are not "keep" (-1)
+  const remap = new Map(); // oldType -> newType
+  for (const [oldType, newType] of typeManualMap) {
+    if (newType !== -1) remap.set(oldType, newType);
   }
-  for (const cell of cellColors) colorToGroup.get(cell.color).cells.push({ x: cell.x, y: cell.y });
+  // remap.size === 0 là bình thường — chỉ bake overrides và save
 
-  // Sort groups by cell count desc
-  groups.sort((a,b) => b.cells.length - a.cells.length);
-
-  // Step 3: assign new type numbers (1-based)
-  State.types.clear();
-  const cellTypeMap = new Map(); // "x,y" -> newType
-  groups.forEach((g) => {
-    const pal = nearestPalette(g.repColor);
-    const t = pal.type;
-    // Merge into existing entry if same palette type already assigned
-    if (State.types.has(t)) {
-      const existing = State.types.get(t);
-      existing.count += g.cells.length;
-    } else {
-      State.types.set(t, { count: g.cells.length, color: pal.hex });
+  // Build new types map
+  const newTypes = new Map();
+  // Keep types that are NOT remapped
+  for (const [t, info] of State.types) {
+    if (!remap.has(t)) newTypes.set(t, { count: 0, color: info.color });
+  }
+  // Add target types from palette
+  for (const [, newType] of remap) {
+    if (!newTypes.has(newType)) {
+      const pal = PALETTE.find(p => p.type === newType);
+      newTypes.set(newType, { count: 0, color: pal ? pal.hex : '#ffffff' });
     }
-    for (const { x, y } of g.cells) cellTypeMap.set(`${x},${y}`, t);
+  }
+
+  // Remap cells (also bake overrides)
+  State.cells = State.cells.map(c => {
+    const overrideColor = State.cellOverrides.get(`${c.x},${c.y}`);
+    const effectiveType = overrideColor
+      ? (() => { const pal = nearestPalette(overrideColor); return pal.type; })()
+      : (remap.has(c.type) ? remap.get(c.type) : c.type);
+    return { ...c, type: effectiveType };
   });
 
-  // Step 4: update cells + clear overrides
-  State.cells = State.cells.map(c => ({ ...c, type: cellTypeMap.get(`${c.x},${c.y}`) || 0 }));
+  // Recount
+  for (const c of State.cells) {
+    if (newTypes.has(c.type)) newTypes.get(c.type).count++;
+    else {
+      const info = State.types.get(c.type);
+      newTypes.set(c.type, { count: 1, color: info?.color ?? '#888' });
+    }
+  }
+
+  State.types = newTypes;
   State.cellOverrides.clear();
+  typeManualMap.clear();
 
   buildTypeList();
   renderMap();
-  showGroupStatus(`Grouped → ${groups.length} color types`);
+  showGroupStatus(`✓ Đã áp dụng → ${State.types.size} types`);
   generateAndShowJSON();
 }
 
@@ -614,12 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
     State.cellOverrides.clear(); closePicker(); renderMap();
   });
 
-  // Group by color
-  const tolSlider = document.getElementById('group-tolerance');
-  tolSlider.addEventListener('input', () => {
-    document.getElementById('group-tol-val').textContent = tolSlider.value;
-  });
-  document.getElementById('btn-group').addEventListener('click', groupByColor);
+  document.getElementById('btn-apply-group').addEventListener('click', applyManualGrouping);
 
   // Copy / Download updated JSON
   document.getElementById('btn-copy-json').addEventListener('click', () => {
