@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Cocos Material Generator — PixelBlask</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+  h1 { text-align: center; margin-bottom: 8px; color: #a78bfa; font-size: 22px; }
+  p.sub { text-align: center; color: #888; margin-bottom: 16px; font-size: 13px; }
+
+  /* ── Drop zone ── */
+  #dropzone {
+    border: 2px dashed #555; border-radius: 12px; padding: 24px;
+    text-align: center; cursor: pointer; margin-bottom: 18px;
+    transition: border-color 0.2s, background 0.2s;
+    color: #aaa; font-size: 14px;
+  }
+  #dropzone.over { border-color: #7c3aed; background: #1e1538; color: #c4b5fd; }
+  #dropzone.loaded { border-color: #10b981; background: #0d2e24; color: #6ee7b7; }
+  #dropzone input[type=file] { display:none; }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #2d2d4e; padding: 8px 6px; text-align: center; color: #a78bfa; white-space: nowrap; }
+  td { padding: 5px 6px; border-bottom: 1px solid #2a2a3e; vertical-align: middle; }
+  tr:hover td { background: #1e1e38; }
+  .col-id { font-weight: bold; font-size: 15px; text-align: center; min-width: 36px; color: #f9a8d4; }
+  .col-name input { width: 110px; background: #2d2d4e; color: #eee; border: 1px solid #555;
+                    border-radius: 4px; padding: 3px 6px; font-size: 13px; }
+  .swatch { width: 28px; height: 28px; border-radius: 5px; border: 2px solid #555; display:inline-block; vertical-align: middle; }
+  input[type=color] { width: 40px; height: 28px; border: none; border-radius: 4px;
+                      cursor: pointer; background: none; padding: 1px; vertical-align: middle; }
+  input[type=number] { width: 56px; background: #2d2d4e; color: #eee; border: 1px solid #555;
+                       border-radius: 4px; padding: 3px 5px; }
+  .count-badge { font-size: 11px; color: #6b7280; margin-left: 4px; }
+
+  /* ── Buttons ── */
+  .btn { padding: 10px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: bold; }
+  .btn-gen { background: #7c3aed; color: white; }
+  .btn-gen:hover { background: #6d28d9; }
+  .btn-reset { background: #374151; color: #ccc; }
+  .btn-reset:hover { background: #4b5563; }
+  .btn-add { background: #1d4ed8; color: #bfdbfe; }
+  .btn-add:hover { background: #1e40af; }
+  .btn-bright { background: #065f46; color: #6ee7b7; }
+  .btn-bright:hover { background: #047857; }
+  .actions { display: flex; gap: 10px; justify-content: center; margin: 16px 0; flex-wrap: wrap; }
+  .section-label { font-size: 11px; color: #777; }
+
+  #log { margin-top: 16px; background: #111827; border-radius: 8px; padding: 12px;
+         font-size: 12px; color: #6ee7b7; min-height: 40px; max-height: 120px; overflow-y: auto; }
+  #info { text-align:center; color:#6b7280; font-size:13px; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<h1>🎨 Material Generator — PixelBlask</h1>
+<p class="sub">Kéo thả file level JSON vào ô dưới → tự động đọc số màu → chỉnh màu → Generate ZIP</p>
+
+<!-- Drop zone -->
+<div id="dropzone" onclick="document.getElementById('jsonInput').click()"
+     ondragover="ev.preventDefault();this.classList.add('over')"
+     ondragleave="this.classList.remove('over')"
+     ondrop="handleDrop(event)">
+  <input type="file" id="jsonInput" accept=".json" onchange="handleFileInput(this)">
+  📂 Kéo thả file <strong>level_data_*.json</strong> vào đây, hoặc click để chọn file
+</div>
+
+<div id="info">Chưa load JSON — đang dùng 19 màu mặc định (ETypeColor 0–18)</div>
+
+<div class="actions">
+  <button class="btn btn-reset" onclick="resetColors()">↺ Reset Colors</button>
+  <button class="btn btn-bright" onclick="brightenBlocker(0.10)">☀ Blocker +10% Sáng</button>
+  <button class="btn btn-bright" onclick="darkenOutline(0.50)" style="background:#1e3a5f;color:#93c5fd">☾ Outline -50% Tối</button>
+  <button class="btn btn-bright" onclick="autoBreakColors()" style="background:#3b1f00;color:#fdba74">✦ Auto Break Colors</button>
+  <button class="btn btn-bright" onclick="toneDownAll(0.10)" style="background:#1a1a1a;color:#a3a3a3" title="Giảm lightness -10% toàn bộ màu pixel + blocker + outline + break">🌑 Tối tổng thể -10%</button>
+  <button class="btn btn-bright" onclick="desaturateBrights(0.50, 0.15)" style="background:#1e1a2e;color:#c4b5fd" title="Màu có L>50%: giảm saturation -15% để bớt chói, giữ nguyên lightness">🔇 Giảm chói sáng (-15%S)</button>
+  <button class="btn btn-add" onclick="addRow()">＋ Thêm type thủ công</button>
+  <button class="btn btn-gen" onclick="generateZip()">⬇ Generate &amp; Download ZIP</button>
+</div>
+
+<table id="colTable">
+  <thead>
+    <tr>
+      <th>Type ID</th>
+      <th>Tên (file)</th>
+      <th>Preview</th>
+      <th>Pixel: Base</th>
+      <th>Shadow</th>
+      <th>Highlight</th>
+      <th>Highlight2</th>
+      <th>LS Pixel</th>
+      <th>Blocker: Base</th>
+      <th>Shadow</th>
+      <th>Highlight</th>
+      <th>Highlight2</th>
+      <th>LS Blocker</th>
+      <th>Outline Color</th>
+      <th>Alpha</th>
+      <th>Break: Tint</th>
+      <th>Shadow</th>
+      <th>Highlight</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<div class="actions">
+  <button class="btn btn-gen" onclick="generateZip()">⬇ Generate &amp; Download ZIP</button>
+</div>
+<div id="log">Chưa load file JSON. Đang dùng 19 màu mặc định (ETypeColor 0–18).</div>
+
+<script>
+// ── Bảng màu mặc định theo colorId (0-based index) ─────────────────────────
+// colorId 0=BLACK,1=BLUE,2=BROWN,3=CYAN,4=GREEN,5=ORANGE,6=PINK,
+//         7=PURPLE,8=RED,9=WHITE,10=YELLOW,11=BEIGE
+// typeId trong JSON thường bắt đầu từ 1, tức typeId=colorId+offset
+// → map sẵn 1-based: typeId 1 → colorId 1 (BLUE), ... 12 → colorId 0 (BLACK wrap)
+
+const COLOR_PRESETS = {
+  // id → { name, pBase, pShadow, pHL, pHL2, pLS, bBase, bShadow, bHL, bHL2, bLS }
+  // bBase/bShadow/bHL/bHL2 = pixel colors với HSL lightness +10% (giữ hue & saturation, chỉ tươi nhẹ hơn)
+  // name dùng để đặt tên file: Pixel_{Name}_MAT.mtl
+  // oBase = pixel base darkened 50% HSL; brTint/brShadow/brHL = break particle colors
+  0:  { name:'Black',        pBase:'#09091f', pShadow:'#09091f', pHL:'#09091f',  pHL2:'#7a7a7a', pLS:0.9,
+        bBase:'#141447', bShadow:'#141447', bHL:'#141447', bHL2:'#949494', bLS:1.0,
+        oBase:'#050510', oAlpha:125,
+        brTint:'#2a2a7e', brShadow:'#03030c', brHL:'#424299' },
+  1:  { name:'Blue',         pBase:'#1f3466', pShadow:'#152b61', pHL:'#1f3466',  pHL2:'#1b3272', pLS:0.9,
+        bBase:'#2b488d', bShadow:'#1e3e8b', bHL:'#2b488d', bHL2:'#25449b', bLS:1.0,
+        oBase:'#0f1a33', oAlpha:125,
+        brTint:'#466abf', brShadow:'#142858', brHL:'#768cc2' },
+  2:  { name:'Brown',        pBase:'#b38254', pShadow:'#704720', pHL:'#b38254',  pHL2:'#b38254', pLS:0.9,
+        bBase:'#c39c77', bShadow:'#98602b', bHL:'#c39c77', bHL2:'#c39c77', bLS:1.0,
+        oBase:'#5b4128', oAlpha:125,
+        brTint:'#d7c3af', brShadow:'#b0753d', brHL:'#e5dcd5' },
+  3:  { name:'Cyan',         pBase:'#2a9caa', pShadow:'#249290', pHL:'#33aab9',  pHL2:'#276b74', pLS:0.9,
+        bBase:'#39bece', bShadow:'#2ebbb8', bHL:'#50c1cf', bHL2:'#348e9a', bLS:1.0,
+        oBase:'#154e55', oAlpha:125,
+        brTint:'#7bcfd9', brShadow:'#1c919f', brHL:'#a8d8de' },
+  4:  { name:'Green',        pBase:'#76d236', pShadow:'#4cbd00', pHL:'#7add35',  pHL2:'#3f6d1f', pLS:0.9,
+        bBase:'#92db60', bShadow:'#61f000', bHL:'#97e461', bHL2:'#56952a', bLS:1.0,
+        oBase:'#3a6c18', oAlpha:125,
+        brTint:'#bee6a1', brShadow:'#68cf20', brHL:'#daeecd' },
+  5:  { name:'Orange',       pBase:'#fbab2f', pShadow:'#c74a03', pHL:'#fbab2f',  pHL2:'#8b611f', pLS:0.9,
+        bBase:'#fcbf61', bShadow:'#f95d04', bHL:'#fcbf61', bHL2:'#b57e28', bLS:1.0,
+        oBase:'#925a03', oAlpha:125,
+        brTint:'#fbddae', brShadow:'#ffa211', brHL:'#fcf1e1' },
+  6:  { name:'Pink',         pBase:'#ff5e9a', pShadow:'#b93f6e', pHL:'#fb83b0',  pHL2:'#ac4f72', pLS:0.9,
+        bBase:'#ff91ba', bShadow:'#c9628a', bHL:'#fdb4cf', bHL2:'#be708d', bLS:1.0,
+        oBase:'#af0041', oAlpha:125,
+        brTint:'#fedeea', brShadow:'#ff448a', brHL:'#ffeef5' },
+  7:  { name:'Purple',       pBase:'#653c9f', pShadow:'#4b287e', pHL:'#653c9f',  pHL2:'#765aa2', pLS:0.9,
+        bBase:'#7e51bd', bShadow:'#6234a5', bHL:'#7e51bd', bHL2:'#917ab5', bLS:1.0,
+        oBase:'#321e50', oAlpha:125,
+        brTint:'#a88cce', brShadow:'#582b96', brHL:'#c4b6d8' },
+  8:  { name:'Red',          pBase:'#b92821', pShadow:'#8f2621', pHL:'#e43630',  pHL2:'#ff9591', pLS:0.9,
+        bBase:'#db3a32', bShadow:'#b8312b', bHL:'#ea625d', bHL2:'#ffc6c4', bLS:1.0,
+        oBase:'#5d1410', oAlpha:125,
+        brTint:'#e27c78', brShadow:'#ad1b14', brHL:'#e5aaa7' },
+  9:  { name:'White',        pBase:'#faffff', pShadow:'#faffff', pHL:'#faffff',  pHL2:'#faffff', pLS:0.9,
+        bBase:'#ffffff', bShadow:'#ffffff', bHL:'#ffffff', bHL2:'#ffffff', bLS:1.0,
+        oBase:'#aaaaaa', oAlpha:125,
+        brTint:'#ffffff', brShadow:'#e1ffff', brHL:'#ffffff' },
+  10: { name:'Yellow',       pBase:'#d1a023', pShadow:'#c58029', pHL:'#f9e557',  pHL2:'#3d3814', pLS:0.9,
+        bBase:'#e0b547', bShadow:'#d99948', bHL:'#fbed88', bHL2:'#635b21', bLS:1.0,
+        oBase:'#695011', oAlpha:125,
+        brTint:'#e8ce8c', brShadow:'#c69414', brHL:'#ecdebb' },
+  11: { name:'Beige',        pBase:'#666770', pShadow:'#4e4f55', pHL:'#666770',  pHL2:'#666770', pLS:0.9,
+        bBase:'#7f808a', bShadow:'#666870', bHL:'#7f808a', bHL2:'#7f808a', bLS:1.0,
+        oBase:'#333438', oAlpha:125,
+        brTint:'#ababab', brShadow:'#50536c', brHL:'#c4c4c4' },
+  12: { name:'Dark_Pink',    pBase:'#c4165a', pShadow:'#8c0e3e', pHL:'#e03475',  pHL2:'#f07aaa', pLS:0.9,
+        bBase:'#e72671', bShadow:'#ba1353', bHL:'#e76093', bHL2:'#f5a8c7', bLS:1.0,
+        oBase:'#620b2d', oAlpha:125,
+        brTint:'#ea6f9f', brShadow:'#b70a4d', brHL:'#eba1be' },
+  13: { name:'Light_Purple', pBase:'#a86dd4', pShadow:'#7a44aa', pHL:'#c490e8',  pHL2:'#dbb8f5', pLS:0.9,
+        bBase:'#bf94e0', bShadow:'#9361c0', bHL:'#dabaf1', bHL2:'#f2e5fb', bLS:1.0,
+        oBase:'#57257c', oAlpha:125,
+        brTint:'#e2d1ef', brShadow:'#9e4fd9', brHL:'#f5eefb' },
+  14: { name:'Light_Orange', pBase:'#ffcc55', pShadow:'#e09020', pHL:'#ffe080',  pHL2:'#fff3c0', pLS:0.9,
+        bBase:'#ffdb88', bShadow:'#e6a64d', bHL:'#ffecb3', bHL2:'#fffdf3', bLS:1.0,
+        oBase:'#aa7700', oAlpha:125,
+        brTint:'#fef2d6', brShadow:'#ffc43b', brHL:'#fff9ed' },
+  15: { name:'Light_Green',  pBase:'#32a800', pShadow:'#326708', pHL:'#50d020',  pHL2:'#32c24b', pLS:1.1,
+        bBase:'#41db00', bShadow:'#49960c', bHL:'#6de241', bHL2:'#54d36a', bLS:1.1,
+        oBase:'#195400', oAlpha:125,
+        brTint:'#6bfa2e', brShadow:'#2a8f00', brHL:'#91f368' },
+  16: { name:'Dark_Orange',  pBase:'#cc4400', pShadow:'#882200', pHL:'#ee6622',  pHL2:'#ff9966', pLS:0.9,
+        bBase:'#ff5500', bShadow:'#bb2f00', bHL:'#f28751', bHL2:'#ffbb99', bLS:1.0,
+        oBase:'#662200', oAlpha:125,
+        brTint:'#fb8951', brShadow:'#b33c00', brHL:'#f5ad89' },
+  17: { name:'Dark_Cyan',    pBase:'#007788', pShadow:'#004455', pHL:'#009eaa',  pHL2:'#00ccd8', pLS:0.9,
+        bBase:'#00a4bb', bShadow:'#006d88', bHL:'#00cddd', bHL2:'#0cf2ff', bLS:1.0,
+        oBase:'#003b44', oAlpha:125,
+        brTint:'#0fdcf9', brShadow:'#00616f', brHL:'#4adcf0' },
+  18: { name:'Dark_Purple',  pBase:'#3d1a6e', pShadow:'#2a0e50', pHL:'#5c2ea0',  pHL2:'#8855cc', pLS:0.9,
+        bBase:'#542497', bShadow:'#41167b', bHL:'#733ac7', bHL2:'#a37cd8', bLS:1.0,
+        oBase:'#1e0d37', oAlpha:125,
+        brTint:'#783eca', brShadow:'#31105f', brHL:'#9670cb' },
+};
+
+function getPreset(typeId) {
+  // Tra thẳng COLOR_PRESETS theo typeId (0–18 có sẵn).
+  // Nếu ngoài range thì wrap về [0,18].
+  const NUM_PRESETS = 19; // 0–18
+  const idx = ((typeId % NUM_PRESETS) + NUM_PRESETS) % NUM_PRESETS;
+  return COLOR_PRESETS[idx] ?? COLOR_PRESETS[0];
+}
+
+// ── Row counter for manual adds ─────────────────────────────────────────────
+let _manualId = 100;
+
+// ── Build rows ───────────────────────────────────────────────────────────────
+function hexToRgb(hex) {
+  hex = hex.replace('#','');
+  if(hex.length===3) hex=hex.split('').map(x=>x+x).join('');
+  const n=parseInt(hex,16);
+  return {r:(n>>16)&255,g:(n>>8)&255,b:n&255};
+}
+
+function mkRow(typeId, p, pixelCount) {
+  const rid = 'r_'+typeId;
+  const countHtml = pixelCount != null ? `<span class="count-badge">(${pixelCount}px)</span>` : '';
+  return `<tr id="${rid}">
+    <td class="col-id">${typeId}${countHtml}</td>
+    <td class="col-name"><input type="text" id="name_${typeId}" value="${p.name}"></td>
+    <td>
+      <div style="display:flex;gap:3px;align-items:center">
+        <div class="swatch" id="sw_${typeId}" style="background:${p.pBase}"></div>
+        <div class="swatch" id="swb_${typeId}" style="background:${p.bBase};opacity:0.85"></div>
+      </div>
+    </td>
+    <td><input type="color" id="pBase_${typeId}"   value="${p.pBase}"   oninput="updateSwatch(${typeId})"></td>
+    <td><input type="color" id="pShadow_${typeId}" value="${p.pShadow}"></td>
+    <td><input type="color" id="pHL_${typeId}"     value="${p.pHL}"></td>
+    <td><input type="color" id="pHL2_${typeId}"    value="${p.pHL2}"></td>
+    <td><input type="number" id="pLS_${typeId}"    value="${p.pLS}" step="0.1" min="0" max="3"></td>
+    <td><input type="color" id="bBase_${typeId}"   value="${p.bBase}"   oninput="updateSwatch(${typeId})"></td>
+    <td><input type="color" id="bShadow_${typeId}" value="${p.bShadow}"></td>
+    <td><input type="color" id="bHL_${typeId}"     value="${p.bHL}"></td>
+    <td><input type="color" id="bHL2_${typeId}"    value="${p.bHL2}"></td>
+    <td><input type="number" id="bLS_${typeId}"    value="${p.bLS}" step="0.1" min="0" max="3"></td>
+    <td><input type="color" id="oBase_${typeId}"  value="${p.oBase||'#333333'}"></td>
+    <td><input type="number" id="oAlpha_${typeId}" value="${p.oAlpha??125}" step="1" min="0" max="255" style="width:52px"></td>
+    <td><input type="color" id="brTint_${typeId}"   value="${p.brTint||p.pBase}"></td>
+    <td><input type="color" id="brShadow_${typeId}" value="${p.brShadow||p.pShadow}"></td>
+    <td><input type="color" id="brHL_${typeId}"     value="${p.brHL||p.pHL}"></td>
+    <td><button onclick="removeRow(${typeId})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px" title="Xóa">✕</button></td>
+  </tr>`;
+}
+
+function updateSwatch(typeId) {
+  const pb = document.getElementById('pBase_'+typeId)?.value;
+  const bb = document.getElementById('bBase_'+typeId)?.value;
+  if(pb) document.getElementById('sw_'+typeId).style.background = pb;
+  if(bb) document.getElementById('swb_'+typeId).style.background = bb;
+}
+
+function removeRow(typeId) {
+  document.getElementById('r_'+typeId)?.remove();
+  _activeTypes = _activeTypes.filter(t => t !== typeId);
+}
+
+let _activeTypes = [];
+let _pixelCounts = {};
+
+function buildTable(types, counts) {
+  _activeTypes = [...types];
+  _pixelCounts = counts || {};
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = types.map(t => mkRow(t, getPreset(t), _pixelCounts[t])).join('');
+}
+
+// Tăng HSL lightness +delta, giữ hue & saturation
+function hexVivifly(hex, delta) {
+  const [h,s,l] = hexToHsl(hex);
+  return hslToHex(h, s, Math.min(1, l + delta));
+}
+
+/** Tính lại outline color = pixel base darkened (L × (1-ratio)) trong HSL */
+function darkenOutline(ratio) {
+  for(const typeId of _activeTypes) {
+    const pb = document.getElementById('pBase_'+typeId)?.value;
+    if(!pb) continue;
+    const [h,s,l] = hexToHsl(pb);
+    const nl = l * (1 - ratio);
+    const el = document.getElementById('oBase_'+typeId);
+    if(el) el.value = hslToHex(h, s, nl);
+  }
+  document.getElementById('log').textContent = `☾ Đã darken outline ×${(1-ratio)*100}% lightness từ pixel base.`;
+}
+
+function hexToHsl(hex) {
+  hex=hex.replace('#',''); if(hex.length===3)hex=hex.split('').map(x=>x+x).join('');
+  let r=parseInt(hex.slice(0,2),16)/255, g=parseInt(hex.slice(2,4),16)/255, b=parseInt(hex.slice(4,6),16)/255;
+  const max=Math.max(r,g,b),min=Math.min(r,g,b); let h,s,l=(max+min)/2;
+  if(max===min){h=s=0;}else{const d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;break;}h/=6;}
+  return [h,s,l];
+}
+function hslToHex(h,s,l){
+  function hue2rgb(p,q,t){if(t<0)t+=1;if(t>1)t-=1;if(t<1/6)return p+(q-p)*6*t;if(t<1/2)return q;if(t<2/3)return p+(q-p)*(2/3-t)*6;return p;}
+  let r,g,b;
+  if(s===0){r=g=b=l;}else{const q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;r=hue2rgb(p,q,h+1/3);g=hue2rgb(p,q,h);b=hue2rgb(p,q,h-1/3);}
+  return '#'+[r,g,b].map(v=>Math.min(255,Math.round(v*255)).toString(16).padStart(2,'0')).join('');
+}
+
+/** Tính lại blocker colors = pixel colors với lightness +delta (HSL), giữ tone màu */
+function brightenBlocker(delta) {
+  for(const typeId of _activeTypes) {
+    const pb = document.getElementById('pBase_'+typeId)?.value;
+    const ps = document.getElementById('pShadow_'+typeId)?.value;
+    const ph = document.getElementById('pHL_'+typeId)?.value;
+    const ph2= document.getElementById('pHL2_'+typeId)?.value;
+    if(!pb) continue;
+    const setV = (id, v) => { const el=document.getElementById(id); if(el) el.value=v; };
+    setV('bBase_'+typeId,   hexVivifly(pb,  delta));
+    setV('bShadow_'+typeId, hexVivifly(ps,  delta));
+    setV('bHL_'+typeId,     hexVivifly(ph,  delta));
+    setV('bHL2_'+typeId,    hexVivifly(ph2, delta));
+    updateSwatch(typeId);
+  }
+  document.getElementById('log').textContent = `☀ Đã vivify blocker L+${Math.round(delta*100)}% (giữ hue/saturation).`;
+}
+
+function resetColors() {
+  _activeTypes.forEach(t => {
+    const p = getPreset(t);
+    ['pBase','pShadow','pHL','pHL2','bBase','bShadow','bHL','bHL2'].forEach(f => {
+      const el = document.getElementById(f+'_'+t);
+      if(el) el.value = p[f];
+    });
+    const pLS = document.getElementById('pLS_'+t);
+    const bLS = document.getElementById('bLS_'+t);
+    if(pLS) pLS.value = p.pLS;
+    if(bLS) bLS.value = p.bLS;
+    const oEl = document.getElementById('oBase_'+t);
+    if(oEl) oEl.value = p.oBase || '#333333';
+    const aEl = document.getElementById('oAlpha_'+t);
+    if(aEl) aEl.value = p.oAlpha ?? 125;
+    ['brTint','brShadow','brHL'].forEach(f => {
+      const el = document.getElementById(f+'_'+t); if(el) el.value = p[f] || p.pBase;
+    });
+    updateSwatch(t);
+  });
+}
+
+function addRow() {
+  const id = _manualId++;
+  _activeTypes.push(id);
+  const tr = document.createElement('tbody');
+  tr.innerHTML = mkRow(id, { name:'Type_'+id, pBase:'#888888', pShadow:'#555555',
+    pHL:'#aaaaaa', pHL2:'#cccccc', pLS:0.9, bBase:'#888888', bShadow:'#555555',
+    bHL:'#aaaaaa', bHL2:'#cccccc', bLS:1.0 }, null);
+  document.getElementById('tbody').appendChild(tr.firstElementChild);
+}
+
+// ── JSON loading ─────────────────────────────────────────────────────────────
+function handleDrop(ev) {
+  ev.preventDefault();
+  document.getElementById('dropzone').classList.remove('over');
+  const file = ev.dataTransfer.files[0];
+  if(file) loadJsonFile(file);
+}
+function handleFileInput(inp) {
+  if(inp.files[0]) loadJsonFile(inp.files[0]);
+}
+
+/** Tạo preset từ 1 màu base hex (dùng khi đọc colorMapping từ JSON) */
+function presetFromColor(name, hex) {
+  const [h,s,l] = hexToHsl(hex);
+  const pBase   = hex;
+  const pShadow = hslToHex(h, Math.min(1,s+0.08), Math.max(0,l-0.12));
+  const pHL     = hslToHex(h, Math.max(0,s-0.05), Math.min(1,l+0.12));
+  const pHL2    = hslToHex(h, Math.max(0,s-0.08), Math.max(0,l-0.06));
+  const bBase   = hslToHex(h, s, Math.min(1,l+0.10));
+  const bShadow = hslToHex(h, Math.min(1,s+0.08), Math.max(0,l-0.02));
+  const bHL     = hslToHex(h, Math.max(0,s-0.05), Math.min(1,l+0.18));
+  const bHL2    = hslToHex(h, Math.max(0,s-0.10), Math.min(1,l+0.22));
+  const oBase   = hslToHex(h, s, l*0.5);
+  const brTint   = hslToHex(h, Math.max(0,s-0.05), Math.min(1,l+0.25));
+  const brShadow = hslToHex(h, Math.min(1,s+0.10), Math.max(0,l-0.05));
+  const brHL     = hslToHex(h, Math.max(0,s-0.15), Math.min(1,l+0.35));
+  return { name, pBase, pShadow, pHL, pHL2, pLS:0.9,
+           bBase, bShadow, bHL, bHL2, bLS:1.0,
+           oBase, oAlpha:125, brTint, brShadow, brHL };
+}
+
+function loadJsonFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const json = JSON.parse(e.target.result);
+      const cells = json?.levelDataPixel?.cells ?? json?.cells;
+      if(!cells) { alert('Không tìm thấy levelDataPixel.cells trong JSON!'); return; }
+
+      // Đọc colorMapping nếu có
+      const colorMap = json?.levelDataPixel?.colorMapping ?? json?.colorMapping ?? null;
+
+      const counts = {};
+      for(const c of cells) { counts[c.type] = (counts[c.type]||0)+1; }
+      const types = Object.keys(counts).map(Number).sort((a,b)=>a-b);
+
+      // Build custom presets từ colorMapping
+      if(colorMap) {
+        _activeTypes = [...types];
+        _pixelCounts = counts;
+        const tbody = document.getElementById('tbody');
+        tbody.innerHTML = types.map(t => {
+          const hex = colorMap[String(t)];
+          const preset = hex
+            ? presetFromColor(colorMap[String(t)] /* dùng hex làm name tạm */ && guessColorName(t, hex), hex)
+            : getPreset(t);
+          // Đặt tên dựa vào ETypeColor nếu có, không thì Type_N
+          if(hex) preset.name = guessColorName(t, hex);
+          return mkRow(t, preset, counts[t]);
+        }).join('');
+
+        const colorInfo = types.map(t => colorMap[String(t)]
+          ? `<span style="display:inline-block;width:12px;height:12px;background:${colorMap[String(t)]};border-radius:2px;vertical-align:middle;margin-right:2px"></span>${t}`
+          : t).join(' ');
+        document.getElementById('log').textContent =
+          `✅ Đã đọc colorMapping: ${types.length} màu từ ${file.name}`;
+      } else {
+        buildTable(types, counts);
+        document.getElementById('log').textContent =
+          `Loaded ${file.name}: ${types.length} types (không có colorMapping, dùng preset mặc định)`;
+      }
+
+      const dz = document.getElementById('dropzone');
+      dz.classList.remove('over'); dz.classList.add('loaded');
+      dz.innerHTML = `✅ <strong>${file.name}</strong> — <strong>${types.length}</strong> màu${colorMap?' (có colorMapping ✓)':''}, tổng ${cells.length} pixel`;
+      document.getElementById('info').textContent =
+        `${types.length} loại từ JSON (IDs: ${types.join(', ')})${colorMap?' — màu auto-fill từ colorMapping':''}`;
+    } catch(err) {
+      alert('Parse JSON lỗi: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+/** Đoán tên màu từ typeId (dùng ETypeColor nếu khớp, không thì Type_N) */
+function guessColorName(typeId, hex) {
+  const ETYPE_NAMES = {
+    0:'Black',1:'Blue',2:'Brown',3:'Cyan',4:'Green',5:'Orange',6:'Pink',
+    7:'Purple',8:'Red',9:'White',10:'Yellow',11:'Beige',
+    12:'Dark_Pink',13:'Light_Purple',14:'Light_Orange',15:'Light_Green',
+    16:'Dark_Orange',17:'Dark_Cyan',18:'Dark_Purple'
+  };
+  return ETYPE_NAMES[typeId] ?? 'Type_'+typeId;
+}
+
+// ── Material templates ────────────────────────────────────────────────────────
+function cc(r,g,b){ return {"__type__":"cc.Color","r":r,"g":g,"b":b,"a":255}; }
+
+function makePixelMat(base,shadow,hl,hl2,ls) {
+  return {
+    "__type__":"cc.Material","_name":"","_objFlags":0,"__editorExtras__":{},"_native":"",
+    "_effectAsset":{"__uuid__":"477675d3-333f-4b6a-be96-02d2e3ef36f9","__expectedType__":"cc.EffectAsset"},
+    "_techIdx":0,
+    "_defines":[{"USE_INSTANCING":true},{"USE_INSTANCING":true}],
+    "_states":[
+      {"rasterizerState":{},"depthStencilState":{},"blendState":{"targets":[]}},
+      {"rasterizerState":{},"depthStencilState":{},"blendState":{"targets":[]}}
+    ],
+    "_props":[{
+      "baseColor":cc(base.r,base.g,base.b),
+      "lightStrength":ls,
+      "shadowColor":cc(shadow.r,shadow.g,shadow.b),
+      "shadowSoftness":-0.33,"shadowThreshold":1.13,
+      "highlightColor":cc(hl.r,hl.g,hl.b),
+      "highlightIntensity":0.5,"specSize":6,
+      "vector3":{"__type__":"cc.Vec4","x":7,"y":50,"z":0,"w":0},
+      "enableSecondFakeSpecular":1,
+      "vector3_2":{"__type__":"cc.Vec4","x":7,"y":57.8,"z":72.1,"w":0},
+      "highlightColor2":cc(hl2.r,hl2.g,hl2.b),
+      "highlightIntensity2":0.5,"specSize2":11.1
+    },{}]
+  };
+}
+
+function makeBlockerMat(base,shadow,hl,hl2,ls) {
+  return {
+    "__type__":"cc.Material","_name":"","_objFlags":0,"__editorExtras__":{},"_native":"",
+    "_effectAsset":{"__uuid__":"477675d3-333f-4b6a-be96-02d2e3ef36f9","__expectedType__":"cc.EffectAsset"},
+    "_techIdx":0,
+    "_defines":[{"USE_INSTANCING":true},{"USE_INSTANCING":true}],
+    "_states":[
+      {"rasterizerState":{},"depthStencilState":{},"blendState":{"targets":[]}},
+      {"rasterizerState":{},"depthStencilState":{},"blendState":{"targets":[]}}
+    ],
+    "_props":[{
+      "baseColor":cc(base.r,base.g,base.b),
+      "lightStrength":ls,
+      "shadowColor":cc(shadow.r,shadow.g,shadow.b),
+      "shadowSoftness":0.07,"shadowThreshold":2,
+      "highlightColor":cc(hl.r,hl.g,hl.b),
+      "highlightIntensity":0.4,"specSize":32.6,
+      "vector3":{"__type__":"cc.Vec4","x":34.1,"y":108.9,"z":57.8,"w":0},
+      "vector3_2":{"__type__":"cc.Vec4","x":34.1,"y":176.2,"z":0,"w":0},
+      "highlightColor2":cc(hl2.r,hl2.g,hl2.b),
+      "highlightIntensity2":0.6
+    },{"shadowOffsetX":0,"shadowOffsetZ":0}]
+  };
+}
+
+/** Auto-compute break colors từ pixel base hiện tại */
+function autoBreakColors() {
+  for(const typeId of _activeTypes) {
+    const pb = document.getElementById('pBase_'+typeId)?.value;
+    if(!pb) continue;
+    const [h,s,l] = hexToHsl(pb);
+    const setV = (id,v) => { const el=document.getElementById(id); if(el) el.value=v; };
+    setV('brTint_'+typeId,   hslToHex(h, Math.max(0,s-0.05), Math.min(1,l+0.25)));
+    setV('brShadow_'+typeId, hslToHex(h, Math.min(1,s+0.10), Math.max(0,l-0.05)));
+    setV('brHL_'+typeId,     hslToHex(h, Math.max(0,s-0.15), Math.min(1,l+0.35)));
+  }
+  document.getElementById('log').textContent = '✦ Đã tính lại break colors từ pixel base.';
+}
+
+/** Shift L trên tất cả color fields của mọi type — không re-derive, giữ nguyên offset tương đối */
+function toneDownAll(deltaL) {
+  const COLOR_IDS = ['pBase','pShadow','pHL','pHL2','bBase','bShadow','bHL','bHL2','oBase','brTint','brShadow','brHL'];
+  for(const typeId of _activeTypes) {
+    for(const cid of COLOR_IDS) {
+      const el = document.getElementById(cid+'_'+typeId);
+      if(!el?.value) continue;
+      const [h,s,l] = hexToHsl(el.value);
+      el.value = hslToHex(h, s, Math.max(0, l - deltaL));
+    }
+    updateSwatch(typeId);
+  }
+  document.getElementById('log').textContent =
+    `🌑 Tối tổng thể -${Math.round(deltaL*100)}%L trên ${_activeTypes.length} màu (tất cả field pixel/blocker/outline/break).`;
+}
+
+/** Với màu sáng (pBase L > threshold): giảm S trên tất cả field để bớt chói, lightness giữ nguyên */
+function desaturateBrights(threshold, deltaS) {
+  const COLOR_IDS = ['pBase','pShadow','pHL','pHL2','bBase','bShadow','bHL','bHL2','brTint','brShadow','brHL'];
+  let changed = 0;
+  for(const typeId of _activeTypes) {
+    const pbEl = document.getElementById('pBase_'+typeId);
+    if(!pbEl?.value) continue;
+    const [,,l0] = hexToHsl(pbEl.value);
+    if(l0 <= threshold) continue;  // màu tối → bỏ qua
+    changed++;
+    for(const cid of COLOR_IDS) {
+      const el = document.getElementById(cid+'_'+typeId);
+      if(!el?.value) continue;
+      const [h,s,l] = hexToHsl(el.value);
+      el.value = hslToHex(h, Math.max(0, s - deltaS), l);
+    }
+    updateSwatch(typeId);
+  }
+  document.getElementById('log').textContent =
+    `🔇 Giảm saturation -${Math.round(deltaS*100)}%S cho ${changed} màu sáng (pBase L > ${Math.round(threshold*100)}%).`;
+}
+
+function makeBreakMat(tint, shadow, hl) {
+  return {
+    "__type__":"cc.Material","_name":"","_objFlags":0,"__editorExtras__":{},"_native":"",
+    "_effectAsset":{"__uuid__":"8b79c05e-a3b8-49d9-8498-e9ad74f9d14e","__expectedType__":"cc.EffectAsset"},
+    "_techIdx":6,
+    "_defines":[{},{}],
+    "_states":[
+      {"rasterizerState":{},"depthStencilState":{},"blendState":{"targets":[{}]}},
+      {"rasterizerState":{},"depthStencilState":{},"blendState":{"targets":[{}]}}
+    ],
+    "_props":[{
+      "tintColor":{"__type__":"cc.Color","r":tint.r,"g":tint.g,"b":tint.b,"a":255},
+      "shadowColor":{"__type__":"cc.Color","r":shadow.r,"g":shadow.g,"b":shadow.b,"a":255},
+      "highlightColor":{"__type__":"cc.Color","r":hl.r,"g":hl.g,"b":hl.b,"a":255}
+    },{}]
+  };
+}
+
+function makeOutlineMat(c, a) {
+  return {
+    "__type__":"cc.Material","_name":"","_objFlags":0,"__editorExtras__":{},"_native":"",
+    "_effectAsset":{"__uuid__":"f1a71931-8b2e-4616-9233-174efef42dfd","__expectedType__":"cc.EffectAsset"},
+    "_techIdx":0,
+    "_defines":[{}],
+    "_states":[{"rasterizerState":{},"depthStencilState":{},"blendState":{"targets":[{}]}}],
+    "_props":[{"mainColor":{"__type__":"cc.Color","r":c.r,"g":c.g,"b":c.b,"a":a}}]
+  };
+}
+
+// ── Generate ZIP ──────────────────────────────────────────────────────────────
+async function generateZip() {
+  const zip = new JSZip();
+  const pixelFolder   = zip.folder("Pixel_MAT");
+  const blockerFolder = zip.folder("Blocker_MAT");
+  const outlineFolder = zip.folder("OutLine");
+  const breakFolder   = zip.folder("BreakMAT");
+  const log = document.getElementById('log');
+  log.textContent = '';
+
+  for(const typeId of _activeTypes) {
+    const name    = (document.getElementById('name_'+typeId)?.value || 'Type_'+typeId).trim();
+    const capName = name.charAt(0).toUpperCase() + name.slice(1);
+
+    const pBase   = hexToRgb(document.getElementById('pBase_'+typeId)?.value||'#888');
+    const pShadow = hexToRgb(document.getElementById('pShadow_'+typeId)?.value||'#555');
+    const pHL     = hexToRgb(document.getElementById('pHL_'+typeId)?.value||'#aaa');
+    const pHL2    = hexToRgb(document.getElementById('pHL2_'+typeId)?.value||'#ccc');
+    const pLS     = parseFloat(document.getElementById('pLS_'+typeId)?.value)||0.9;
+
+    const bBase   = hexToRgb(document.getElementById('bBase_'+typeId)?.value||'#888');
+    const bShadow = hexToRgb(document.getElementById('bShadow_'+typeId)?.value||'#555');
+    const bHL     = hexToRgb(document.getElementById('bHL_'+typeId)?.value||'#aaa');
+    const bHL2    = hexToRgb(document.getElementById('bHL2_'+typeId)?.value||'#ccc');
+    const bLS     = parseFloat(document.getElementById('bLS_'+typeId)?.value)||1.0;
+
+    const oBase   = hexToRgb(document.getElementById('oBase_'+typeId)?.value||'#333');
+    const oAlpha  = parseInt(document.getElementById('oAlpha_'+typeId)?.value)||125;
+
+    const brTint   = hexToRgb(document.getElementById('brTint_'+typeId)?.value||'#888');
+    const brShadow = hexToRgb(document.getElementById('brShadow_'+typeId)?.value||'#555');
+    const brHL     = hexToRgb(document.getElementById('brHL_'+typeId)?.value||'#aaa');
+
+    const pName  = `Pixel_${capName}_MAT.mtl`;
+    const bName  = `Blocker_${capName}_MAT.mtl`;
+    const oName  = `${name.toUpperCase()}.mtl`;
+    const brName = `B_${capName}_MAT.mtl`;
+
+    pixelFolder.file(pName,   JSON.stringify(makePixelMat(pBase,pShadow,pHL,pHL2,pLS),    null,2));
+    blockerFolder.file(bName, JSON.stringify(makeBlockerMat(bBase,bShadow,bHL,bHL2,bLS),  null,2));
+    outlineFolder.file(oName, JSON.stringify(makeOutlineMat(oBase, oAlpha),                null,2));
+    breakFolder.file(brName,  JSON.stringify(makeBreakMat(brTint, brShadow, brHL),         null,2));
+
+    log.textContent += `[Type ${typeId}] ${pName}  |  ${bName}  |  ${oName}  |  ${brName}\n`;
+  }
+
+  log.textContent += `\nGenerating ZIP (${_activeTypes.length * 4} files)...`;
+  const blob = await zip.generateAsync({type:'blob'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href=url; a.download='PixelBlask_Materials.zip'; a.click();
+  URL.revokeObjectURL(url);
+  log.textContent += `\n✅ Done! ${_activeTypes.length * 4} files generated (Pixel + Blocker + OutLine + BreakMAT).`;
+}
+
+// ── Init: default 19 colors (ETypeColor 0–18) ────────────────────────────────
+buildTable([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18], null);
+</script>
+</body>
+</html>
