@@ -562,16 +562,22 @@ function sampleAndCluster() {
 // ============================================================
 // Palette UI
 // ============================================================
+// Số type nhỏ nhất chưa dùng (>=1) — để đánh số tuần tự, lấp khoảng trống
+function nextFreeType() {
+  const used = new Set([...AppState.typeMap.values()]);
+  let t = 1;
+  while (used.has(t)) t++;
+  return t;
+}
+
 function renderPalette() {
   const list = document.getElementById('color-list');
   list.innerHTML = '';
   const colors = [...AppState.colorMap.values()].sort((a,b) => b.count - a.count);
 
   for (const { hex, count, merged } of colors) {
-    // Auto-match to nearest palette color
-    const { match, dist } = nearestPalette(hex);
-    // Auto-assign type if not yet set by user
-    if (!AppState.typeMap.has(hex)) AppState.typeMap.set(hex, match.type);
+    // Tự đánh số type theo thứ tự (không match màu palette gần nhất nữa)
+    if (!AppState.typeMap.has(hex)) AppState.typeMap.set(hex, nextFreeType());
 
     const row = document.createElement('div');
     row.className = 'color-row'; row.dataset.hex = hex;
@@ -585,13 +591,6 @@ function renderPalette() {
     info.className = 'color-info';
     info.innerHTML = `<div class="color-hex">${hex}</div><div class="color-meta">×${count}${merged>1?` (${merged} shades)`:''}</div>`;
 
-    // Matched palette indicator
-    const matchEl = document.createElement('div');
-    matchEl.style.cssText = 'display:flex;align-items:center;gap:4px;flex-shrink:0;';
-    matchEl.innerHTML = `
-      <div style="width:18px;height:18px;border-radius:3px;border:1px solid rgba(255,255,255,0.2);background:${match.hex};flex-shrink:0;" title="${match.name} ${match.hex}"></div>
-      <span style="font-size:0.6rem;color:#6b6b8a;white-space:nowrap;">${match.name}<br>Δ${dist}</span>`;
-
     // Type input (pre-filled)
     const typeInput = document.createElement('input');
     typeInput.type = 'number'; typeInput.className = 'type-input'; typeInput.min = '0'; typeInput.placeholder = '0';
@@ -603,13 +602,13 @@ function renderPalette() {
       else { AppState.typeMap.delete(hex); typeInput.classList.remove('assigned'); }
     });
 
-    row.appendChild(swatch); row.appendChild(info); row.appendChild(matchEl); row.appendChild(typeInput);
+    row.appendChild(swatch); row.appendChild(info); row.appendChild(typeInput);
     list.appendChild(row);
   }
 
   const n = colors.length;
   document.getElementById('palette-hint').textContent = n
-    ? `${n} colors auto-matched to palette. Adjust type numbers if needed.`
+    ? `${n} màu, đã tự đánh số type theo thứ tự. Sửa số type nếu cần.`
     : 'Define the grid to detect colors.';
 }
 
@@ -630,13 +629,10 @@ function generateJSON() {
       cells.push({ x: i, y: rows - 1 - j, type: (hex && typeMap.get(hex)) || 0 });
     }
 
-  // colorMapping: use clean palette hex, not raw sampled hex
+  // colorMapping: dùng đúng màu phát hiện được (không thay bằng màu palette)
   const colorMapping = {};
   for (const [hex, typeNum] of typeMap) {
-    if (typeNum > 0) {
-      const palEntry = PALETTE.find(p => p.type === typeNum);
-      colorMapping[typeNum] = palEntry ? palEntry.hex : hex;
-    }
+    if (typeNum > 0) colorMapping[typeNum] = hex;
   }
 
   const sqrMagnitude = cols*cols + rows*rows;

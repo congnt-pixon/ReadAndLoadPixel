@@ -82,6 +82,33 @@
     #paint-color-wrap { display:flex; align-items:center; gap:6px; font-size:0.7rem; color:#9ca3af; }
     #paint-color { width:36px; height:28px; border:none; border-radius:4px; cursor:pointer; padding:1px; background:transparent; }
 
+    /* Paint type swatches */
+    #paint-type-list { display:flex; gap:4px; flex-wrap:wrap; max-width:560px; }
+    .paint-type-swatch {
+      min-width:34px; height:28px;
+      border:2px solid transparent;
+      border-radius:5px;
+      cursor:pointer;
+      color:#fff;
+      font-family:inherit;
+      font-size:0.62rem;
+      font-weight:700;
+      text-shadow:0 1px 2px rgba(0,0,0,0.85);
+      padding:0 5px;
+      transition:transform 0.08s, border-color 0.12s;
+    }
+    .paint-type-swatch:hover { border-color:#a78bfa88; transform:translateY(-1px); }
+    .paint-type-swatch.selected { border-color:#fff; box-shadow:0 0 8px #7c3aed; }
+    #paint-new-color-section { display:none; align-items:center; gap:6px; padding:4px 8px; background:#0d0d1f; border:1px dashed #7c3aed; border-radius:5px; }
+    #paint-new-color-section.visible { display:flex; }
+    #btn-toggle-new-color.active { background:#7c3aed; color:#fff; }
+    #btn-toggle-eraser.active { background:#b91c1c; color:#fff; box-shadow:0 0 8px #ef444488; }
+    #paint-current-info { font-size:0.68rem; color:#e0e0f0; margin-left:auto; }
+
+    /* Expand grid buttons */
+    .expand-btn-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+    .expand-btn-grid .btn { font-size:0.68rem; padding:4px 6px; }
+
     /* Floating cell color picker */
     #cell-picker-wrap {
       position: fixed;
@@ -141,6 +168,25 @@
         <button class="btn btn-danger"  id="btn-clear-overrides" style="width:100%;">&#10006; Clear Cell Edits</button>
         <button class="btn btn-success" id="btn-export-img"      style="width:100%;">&#8659; Export PNG</button>
         <div style="border-top:1px solid #2d2d4e;padding-top:8px;display:flex;flex-direction:column;gap:6px;">
+          <div style="font-size:0.72rem;color:#a78bfa;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Mở rộng grid</div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:#9ca3af;">
+            <span>Số ô:</span>
+            <input type="number" id="expand-count" min="-200" max="200" value="1" title="Số dương = thêm, số âm = xoá" style="width:62px;background:#0f0f1a;border:1px solid #3b3b5c;border-radius:4px;color:#e0e0f0;padding:3px 5px;font-family:inherit;font-size:0.76rem;text-align:center;">
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:#9ca3af;">
+            <span>Fill:</span>
+            <select id="expand-fill-type" style="flex:1;font-size:0.7rem;background:#0d0d1f;color:#c4b5fd;border:1px solid #3b3b5c;border-radius:4px;padding:2px 4px;cursor:pointer;"></select>
+          </div>
+          <div class="expand-btn-grid">
+            <button class="btn btn-secondary" data-expand="top">&#8593; Top</button>
+            <button class="btn btn-secondary" data-expand="bottom">&#8595; Bottom</button>
+            <button class="btn btn-secondary" data-expand="left">&#8592; Left</button>
+            <button class="btn btn-secondary" data-expand="right">&#8594; Right</button>
+          </div>
+          <span id="expand-status" style="font-size:0.65rem;color:#4ade80;display:none;"></span>
+        </div>
+
+        <div style="border-top:1px solid #2d2d4e;padding-top:8px;display:flex;flex-direction:column;gap:6px;">
           <div style="font-size:0.72rem;color:#a78bfa;font-weight:700;letter-spacing:1px;text-transform:uppercase;">Gán type thủ công</div>
           <div style="font-size:0.65rem;color:#6b6b8a;">Mỗi dòng: chọn palette type muốn gán</div>
           <button class="btn btn-primary" id="btn-apply-group" style="width:100%;">&#10003; Apply &amp; Save JSON</button>
@@ -159,12 +205,15 @@
         <span id="map-info"></span>
       </div>
       <div id="paint-toolbar">
-        <span style="font-size:0.72rem;color:#a78bfa;font-weight:700;">🖌 Màu vẽ:</span>
-        <div id="paint-color-wrap">
+        <span style="font-size:0.72rem;color:#a78bfa;font-weight:700;">&#128396; Type vẽ:</span>
+        <div id="paint-type-list"></div>
+        <button class="btn btn-secondary btn-sm" id="btn-toggle-new-color" title="Vẽ bằng màu mới (tạo type mới)">+ Màu mới</button>
+        <button class="btn btn-secondary btn-sm" id="btn-toggle-eraser" title="Tẩy ô — click/kéo để xoá hẳn, vị trí đó trống">&#129529; Tẩy</button>
+        <div id="paint-new-color-section">
           <input type="color" id="paint-color" value="#ffffff">
           <span id="paint-color-hex" style="color:#e0e0f0;font-size:0.72rem;min-width:54px;">#ffffff</span>
         </div>
-        <span style="font-size:0.68rem;color:#6b6b8a;">← chọn màu rồi click/kéo lên bản đồ</span>
+        <span id="paint-current-info"></span>
       </div>
       <div id="map-container">
         <canvas id="map-canvas"></canvas>
@@ -188,8 +237,9 @@
 <div id="cell-picker-wrap">
   <span id="cell-picker-label">(0,0)</span>
   <input type="color" id="cell-picker">
-  <button class="btn btn-sm" id="btn-assign-type" title="Gán màu này thành type mới (ID ≥ 11)" style="background:#4c1d95;color:#e9d5ff;font-size:0.68rem;padding:3px 7px">+Type</button>
+  <button class="btn btn-sm" id="btn-assign-type" title="Gán màu này thành type mới" style="background:#4c1d95;color:#e9d5ff;font-size:0.68rem;padding:3px 7px">+Type</button>
   <button class="btn btn-danger btn-sm" id="btn-clear-cell" title="Reset to type color">&#8635;</button>
+  <button class="btn btn-danger btn-sm" id="btn-delete-cell" title="Xoá hẳn ô này (để trống)">&#128465;</button>
 </div>
 
 <div id="cell-tooltip"></div>
@@ -239,7 +289,12 @@ function parseJSON(raw) {
 
   showStatus(`✓ ${lp.cells.length} cells · ${State.types.size} types · ${State.cols}×${State.rows}`, false);
   document.getElementById('workspace').classList.add('visible');
+  // Reset paint selection to first available type
+  paintTypeId = State.types.size ? [...State.types.keys()].sort((a,b)=>a-b)[0] : null;
+  useNewColor = false;
   buildTypeList();
+  buildPaintTypeList();
+  buildExpandFillOptions();
   renderMap();
 }
 
@@ -257,10 +312,8 @@ const typeManualMap = new Map();
 function buildPaletteOptions(selectedType) {
   let opts = `<option value="-1"${selectedType === -1 ? ' selected' : ''}>— giữ nguyên —</option>`;
   for (const [t, info] of [...State.types.entries()].sort((a,b) => a[0]-b[0])) {
-    const palName = PALETTE.find(p => p.type === t)?.name ?? 'custom';
     const sel = t === selectedType ? ' selected' : '';
-    const colorBox = `&#9632;`;
-    opts += `<option value="${t}"${sel}>#${t} ${palName} ${colorBox}</option>`;
+    opts += `<option value="${t}"${sel}>#${t} ${info.color}</option>`;
   }
   return opts;
 }
@@ -375,7 +428,7 @@ function snapshotTypes() {
 }
 
 function startStroke() {
-  currentStroke = { changedCells: new Map(), typesBefore: snapshotTypes() };
+  currentStroke = { kind: 'stroke', changedCells: new Map(), typesBefore: snapshotTypes() };
 }
 
 function commitStroke() {
@@ -386,22 +439,49 @@ function commitStroke() {
   currentStroke = null;
 }
 
+function pushUndo(action) {
+  undoStack.push(action);
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+}
+
 function undo() {
   if (!undoStack.length) return;
-  const stroke = undoStack.pop();
-  State.types = stroke.typesBefore;
-  for (const [key, oldType] of stroke.changedCells) {
-    const [x, y] = key.split(',').map(Number);
-    const cell = State.cells.find(c => c.x === x && c.y === y);
-    if (cell) cell.type = oldType;
+  const action = undoStack.pop();
+  if (action.kind === 'stroke') {
+    State.types = action.typesBefore;
+    for (const [key, oldType] of action.changedCells) {
+      const [x, y] = key.split(',').map(Number);
+      const idx = State.cells.findIndex(c => c.x === x && c.y === y);
+      if (oldType === null) {
+        // trước đó trống → bỏ ô vừa được tô tạo ra
+        if (idx !== -1) State.cells.splice(idx, 1);
+      } else if (idx !== -1) {
+        State.cells[idx].type = oldType;
+      } else {
+        State.cells.push({ x, y, type: oldType }); // ô đã bị xoá → tái tạo lại
+      }
+    }
+  } else if (action.kind === 'expand') {
+    State.cells = action.cells;
+    State.types = action.types;
+    State.cols = action.cols;
+    State.rows = action.rows;
+    State.cellOverrides = action.cellOverrides;
   }
   buildTypeList();
+  buildPaintTypeList();
+  buildExpandFillOptions();
   renderMap();
 }
 
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
 });
+
+// Paint selection state
+let paintTypeId = null;       // selected existing type
+let useNewColor = false;      // true when user opted in to a brand-new color
+let eraserMode = false;       // true when erasing cells (xoá hẳn)
 
 function getPaintColor() { return document.getElementById('paint-color').value; }
 
@@ -417,6 +497,63 @@ function getOrCreateTypeForColor(color) {
   return newId;
 }
 
+function resolvePaintTypeId() {
+  if (useNewColor) {
+    return getOrCreateTypeForColor(getPaintColor());
+  }
+  if (paintTypeId !== null && State.types.has(paintTypeId)) return paintTypeId;
+  // fallback: first available type
+  if (State.types.size) {
+    const t = [...State.types.keys()].sort((a,b)=>a-b)[0];
+    paintTypeId = t;
+    return t;
+  }
+  return null;
+}
+
+function buildPaintTypeList() {
+  const list = document.getElementById('paint-type-list');
+  if (!list) return;
+  list.innerHTML = '';
+  for (const [t, info] of [...State.types.entries()].sort((a,b) => a[0]-b[0])) {
+    const btn = document.createElement('button');
+    btn.className = 'paint-type-swatch';
+    btn.dataset.type = t;
+    btn.style.background = info.color;
+    btn.title = `Type #${t} · ${info.color} · ×${info.count}`;
+    btn.textContent = `#${t}`;
+    if (!useNewColor && !eraserMode && paintTypeId === t) btn.classList.add('selected');
+    btn.addEventListener('click', () => {
+      paintTypeId = t;
+      useNewColor = false;
+      eraserMode = false;
+      document.getElementById('paint-new-color-section').classList.remove('visible');
+      document.getElementById('btn-toggle-new-color').classList.remove('active');
+      document.getElementById('btn-toggle-eraser').classList.remove('active');
+      buildPaintTypeList();
+      updatePaintIndicator();
+    });
+    list.appendChild(btn);
+  }
+  updatePaintIndicator();
+}
+
+function updatePaintIndicator() {
+  const info = document.getElementById('paint-current-info');
+  if (!info) return;
+  if (eraserMode) {
+    info.innerHTML = `<span style="color:#fca5a5">&#129529; Đang tẩy ô (xoá hẳn → để trống)</span>`;
+  } else if (useNewColor) {
+    const color = getPaintColor();
+    info.innerHTML = `Đang vẽ: <span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${color};vertical-align:middle;border:1px solid rgba(255,255,255,0.2)"></span> ${color} <span style="color:#a78bfa">(màu mới)</span>`;
+  } else if (paintTypeId !== null && State.types.has(paintTypeId)) {
+    const t = State.types.get(paintTypeId);
+    info.innerHTML = `Đang vẽ: type <b>#${paintTypeId}</b> <span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${t.color};vertical-align:middle;border:1px solid rgba(255,255,255,0.2)"></span> ${t.color}`;
+  } else {
+    info.textContent = 'Chưa chọn type';
+  }
+}
+
 function paintCell(clientX, clientY) {
   if (!State.cells.length) return;
   const canvas = document.getElementById('map-canvas');
@@ -430,8 +567,10 @@ function paintCell(clientX, clientY) {
   if (key === lastPaintedKey) return;
   lastPaintedKey = key;
 
-  const color = getPaintColor();
-  const typeId = getOrCreateTypeForColor(color);
+  if (eraserMode) { eraseCellAt(cx, cy, key); return; }
+
+  const typeId = resolvePaintTypeId();
+  if (typeId === null) return;
 
   const cell = State.cells.find(c => c.x === cx && c.y === cy);
   if (cell) {
@@ -443,9 +582,35 @@ function paintCell(clientX, clientY) {
     if (oldInfo && oldInfo.count > 0) oldInfo.count--;
     State.types.get(typeId).count++;
     cell.type = typeId;
+  } else {
+    // Ô trống (đã bị xoá hoặc chưa có) → tạo ô mới
+    if (currentStroke && !currentStroke.changedCells.has(key)) {
+      currentStroke.changedCells.set(key, null); // null = trước đó trống
+    }
+    State.cells.push({ x: cx, y: cy, type: typeId });
+    State.types.get(typeId).count++;
   }
   State.cellOverrides.delete(key);
   buildTypeList();
+  buildPaintTypeList();
+  renderMap();
+}
+
+// Xoá hẳn 1 ô — vị trí đó trống (không còn trong State.cells)
+function eraseCellAt(cx, cy, key) {
+  const idx = State.cells.findIndex(c => c.x === cx && c.y === cy);
+  if (idx === -1) return; // đã trống
+  const cell = State.cells[idx];
+  // undo: lưu type cũ (undo sẽ tái tạo lại ô)
+  if (currentStroke && !currentStroke.changedCells.has(key)) {
+    currentStroke.changedCells.set(key, cell.type);
+  }
+  const info = State.types.get(cell.type);
+  if (info && info.count > 0) info.count--;
+  State.cells.splice(idx, 1);
+  State.cellOverrides.delete(key);
+  buildTypeList();
+  buildPaintTypeList();
   renderMap();
 }
 
@@ -464,6 +629,29 @@ document.getElementById('btn-paint-mode').addEventListener('click', () => {
 
 document.getElementById('paint-color').addEventListener('input', e => {
   document.getElementById('paint-color-hex').textContent = e.target.value;
+  if (useNewColor) updatePaintIndicator();
+});
+
+document.getElementById('btn-toggle-new-color').addEventListener('click', () => {
+  useNewColor = !useNewColor;
+  if (useNewColor) eraserMode = false; // tắt tẩy khi bật màu mới
+  document.getElementById('btn-toggle-new-color').classList.toggle('active', useNewColor);
+  document.getElementById('paint-new-color-section').classList.toggle('visible', useNewColor);
+  document.getElementById('btn-toggle-eraser').classList.toggle('active', eraserMode);
+  buildPaintTypeList();
+  updatePaintIndicator();
+});
+
+document.getElementById('btn-toggle-eraser').addEventListener('click', () => {
+  eraserMode = !eraserMode;
+  if (eraserMode) {
+    useNewColor = false; // tắt màu mới khi bật tẩy
+    document.getElementById('btn-toggle-new-color').classList.remove('active');
+    document.getElementById('paint-new-color-section').classList.remove('visible');
+  }
+  document.getElementById('btn-toggle-eraser').classList.toggle('active', eraserMode);
+  buildPaintTypeList();
+  updatePaintIndicator();
 });
 
 const mapCanvas = document.getElementById('map-canvas');
@@ -546,9 +734,10 @@ function closePicker() {
   activeCellKey = null;
 }
 
-function nextCustomTypeId() {
-  let max = 10; // palette occupies 0–10
-  for (const t of State.types.keys()) if (t > max) max = t;
+// Số type tiếp theo theo thứ tự (max hiện có + 1), không reserve cho palette
+function nextCustomTypeId(typesMap = State.types) {
+  let max = 0;
+  for (const t of typesMap.keys()) if (t > max) max = t;
   return max + 1;
 }
 
@@ -583,6 +772,29 @@ function assignColorAsType() {
 
 document.getElementById('btn-assign-type').addEventListener('click', assignColorAsType);
 
+// Xoá hẳn ô đang chọn (từ popup picker) — vị trí đó trống
+function deleteActiveCell() {
+  if (!activeCellKey) return;
+  const [x, y] = activeCellKey.split(',').map(Number);
+  const idx = State.cells.findIndex(c => c.x === x && c.y === y);
+  if (idx !== -1) {
+    startStroke();
+    const cell = State.cells[idx];
+    currentStroke.changedCells.set(activeCellKey, cell.type);
+    const info = State.types.get(cell.type);
+    if (info && info.count > 0) info.count--;
+    State.cells.splice(idx, 1);
+    commitStroke();
+  }
+  State.cellOverrides.delete(activeCellKey);
+  buildTypeList();
+  buildPaintTypeList();
+  renderMap();
+  closePicker();
+}
+
+document.getElementById('btn-delete-cell').addEventListener('click', deleteActiveCell);
+
 // ============================================================
 // Hover tooltip
 // ============================================================
@@ -609,49 +821,154 @@ document.getElementById('map-canvas').addEventListener('mouseleave', () => {
 });
 
 // ============================================================
-// Palette enum (must match GenJson)
+// Expand grid (mở rộng vùng pixel)
 // ============================================================
-const PALETTE = [
-  { type: 0,  name: 'BLACK',  hex: '#000000' },
-  { type: 1,  name: 'BLUE',   hex: '#1246A2' },
-  { type: 2,  name: 'BROWN',  hex: '#8C4914' },
-  { type: 3,  name: 'CYAN',   hex: '#45D8E9' },
-  { type: 4,  name: 'GREEN',  hex: '#2DCA2D' },
-  { type: 5,  name: 'ORANGE', hex: '#F88716' },
-  { type: 6,  name: 'PINK',   hex: '#F380DE' },
-  { type: 7,  name: 'PURPLE', hex: '#9738F1' },
-  { type: 8,  name: 'RED',    hex: '#BB1416' },
-  { type: 9,  name: 'WHITE',  hex: '#ffffff' },
-  { type: 10, name: 'YELLOW', hex: '#FFE000' },
-];
-
-// ============================================================
-// Color distance
-// ============================================================
-function hexToRgb(h) { return { r:parseInt(h.slice(1,3),16), g:parseInt(h.slice(3,5),16), b:parseInt(h.slice(5,7),16) }; }
-function colorDist(a, b) { const A=hexToRgb(a),B=hexToRgb(b); return Math.sqrt((A.r-B.r)**2+(A.g-B.g)**2+(A.b-B.b)**2); }
-
-// CIELAB Delta-E — perceptually accurate
-function rgbToLab(r,g,b) {
-  let R=r/255,G=g/255,B=b/255;
-  R=R>0.04045?Math.pow((R+0.055)/1.055,2.4):R/12.92;
-  G=G>0.04045?Math.pow((G+0.055)/1.055,2.4):G/12.92;
-  B=B>0.04045?Math.pow((B+0.055)/1.055,2.4):B/12.92;
-  const X=(R*0.4124+G*0.3576+B*0.1805)/0.95047;
-  const Y=(R*0.2126+G*0.7152+B*0.0722)/1.00000;
-  const Z=(R*0.0193+G*0.1192+B*0.9505)/1.08883;
-  const f=v=>v>0.008856?Math.cbrt(v):(7.787*v+16/116);
-  return { L:116*f(Y)-16, a:500*(f(X)-f(Y)), b:200*(f(Y)-f(Z)) };
+function buildExpandFillOptions() {
+  const sel = document.getElementById('expand-fill-type');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '';
+  for (const [t, info] of [...State.types.entries()].sort((a,b) => a[0]-b[0])) {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = `#${t} ${info.color}`;
+    sel.appendChild(opt);
+  }
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
 }
-function colorDistLab(hexA,hexB) {
-  const A=hexToRgb(hexA),B=hexToRgb(hexB);
-  const lA=rgbToLab(A.r,A.g,A.b),lB=rgbToLab(B.r,B.g,B.b);
-  return Math.sqrt((lA.L-lB.L)**2+(lA.a-lB.a)**2+(lA.b-lB.b)**2);
-}
-function nearestPalette(hex) {
-  let best=PALETTE[0], bestDist=Infinity;
-  for (const p of PALETTE) { const d=colorDistLab(hex,p.hex); if(d<bestDist){bestDist=d;best=p;} }
-  return best;
+
+function expandGrid(direction, count, fillType) {
+  if (!State.cells.length || count === 0) return;
+
+  // Clamp shrink amount so grid keeps at least 1 row/col
+  if (count < 0) {
+    const axisSize = (direction === 'top' || direction === 'bottom') ? State.rows : State.cols;
+    const maxRemove = Math.max(0, axisSize - 1);
+    if (maxRemove === 0) {
+      const stEl = document.getElementById('expand-status');
+      stEl.textContent = `✗ Không thể xoá thêm (grid tối thiểu 1×1)`;
+      stEl.style.color = '#f87171';
+      stEl.style.display = 'inline';
+      setTimeout(() => { stEl.style.display = 'none'; stEl.style.color = '#4ade80'; }, 2500);
+      return;
+    }
+    if (-count > maxRemove) count = -maxRemove;
+  }
+
+  // Snapshot for undo
+  pushUndo({
+    kind: 'expand',
+    cells: State.cells.map(c => ({ ...c })),
+    types: snapshotTypes(),
+    cols: State.cols,
+    rows: State.rows,
+    cellOverrides: new Map(State.cellOverrides),
+  });
+
+  if (count > 0) {
+    // ---- EXPAND ----
+    if (!State.types.has(fillType)) {
+      State.types.set(fillType, { count: 0, color: '#000000' });
+    }
+
+    if (direction === 'bottom') {
+      State.cells.forEach(c => { c.y += count; });
+      const shifted = new Map();
+      for (const [k, v] of State.cellOverrides) {
+        const [x, y] = k.split(',').map(Number);
+        shifted.set(`${x},${y + count}`, v);
+      }
+      State.cellOverrides = shifted;
+    } else if (direction === 'left') {
+      State.cells.forEach(c => { c.x += count; });
+      const shifted = new Map();
+      for (const [k, v] of State.cellOverrides) {
+        const [x, y] = k.split(',').map(Number);
+        shifted.set(`${x + count},${y}`, v);
+      }
+      State.cellOverrides = shifted;
+    }
+
+    let added = 0;
+    if (direction === 'top') {
+      for (let y = State.rows; y < State.rows + count; y++)
+        for (let x = 0; x < State.cols; x++) { State.cells.push({ x, y, type: fillType }); added++; }
+      State.rows += count;
+    } else if (direction === 'bottom') {
+      for (let y = 0; y < count; y++)
+        for (let x = 0; x < State.cols; x++) { State.cells.push({ x, y, type: fillType }); added++; }
+      State.rows += count;
+    } else if (direction === 'right') {
+      for (let x = State.cols; x < State.cols + count; x++)
+        for (let y = 0; y < State.rows; y++) { State.cells.push({ x, y, type: fillType }); added++; }
+      State.cols += count;
+    } else if (direction === 'left') {
+      for (let x = 0; x < count; x++)
+        for (let y = 0; y < State.rows; y++) { State.cells.push({ x, y, type: fillType }); added++; }
+      State.cols += count;
+    }
+    State.types.get(fillType).count += added;
+  } else {
+    // ---- SHRINK ---- (count < 0)
+    const n = -count;
+    let removed = [];
+    if (direction === 'top') {
+      const cutoff = State.rows - n;
+      removed = State.cells.filter(c => c.y >= cutoff);
+      State.cells = State.cells.filter(c => c.y < cutoff);
+      for (const k of [...State.cellOverrides.keys()]) {
+        const [, y] = k.split(',').map(Number);
+        if (y >= cutoff) State.cellOverrides.delete(k);
+      }
+      State.rows -= n;
+    } else if (direction === 'bottom') {
+      removed = State.cells.filter(c => c.y < n);
+      State.cells = State.cells.filter(c => c.y >= n).map(c => ({ ...c, y: c.y - n }));
+      const shifted = new Map();
+      for (const [k, v] of State.cellOverrides) {
+        const [x, y] = k.split(',').map(Number);
+        if (y >= n) shifted.set(`${x},${y - n}`, v);
+      }
+      State.cellOverrides = shifted;
+      State.rows -= n;
+    } else if (direction === 'right') {
+      const cutoff = State.cols - n;
+      removed = State.cells.filter(c => c.x >= cutoff);
+      State.cells = State.cells.filter(c => c.x < cutoff);
+      for (const k of [...State.cellOverrides.keys()]) {
+        const [x] = k.split(',').map(Number);
+        if (x >= cutoff) State.cellOverrides.delete(k);
+      }
+      State.cols -= n;
+    } else if (direction === 'left') {
+      removed = State.cells.filter(c => c.x < n);
+      State.cells = State.cells.filter(c => c.x >= n).map(c => ({ ...c, x: c.x - n }));
+      const shifted = new Map();
+      for (const [k, v] of State.cellOverrides) {
+        const [x, y] = k.split(',').map(Number);
+        if (x >= n) shifted.set(`${x - n},${y}`, v);
+      }
+      State.cellOverrides = shifted;
+      State.cols -= n;
+    }
+    // Decrement counts for removed cells
+    for (const c of removed) {
+      const info = State.types.get(c.type);
+      if (info && info.count > 0) info.count--;
+    }
+  }
+
+  buildTypeList();
+  buildPaintTypeList();
+  buildExpandFillOptions();
+  renderMap();
+
+  const stEl = document.getElementById('expand-status');
+  const sign = count > 0 ? '+' : '';
+  const action = count > 0 ? 'thêm' : 'xoá';
+  stEl.textContent = `✓ ${sign}${count} ${direction} (${action}) · grid ${State.cols}×${State.rows}`;
+  stEl.style.display = 'inline';
+  setTimeout(() => stEl.style.display = 'none', 2500);
 }
 
 // ============================================================
@@ -673,19 +990,28 @@ function applyManualGrouping() {
   for (const [t, info] of State.types) {
     if (!remap.has(t)) newTypes.set(t, { count: 0, color: info.color });
   }
-  // Add target types from palette
+  // Add remap target types (lấy màu từ type hiện có)
   for (const [, newType] of remap) {
     if (!newTypes.has(newType)) {
-      const pal = PALETTE.find(p => p.type === newType);
-      newTypes.set(newType, { count: 0, color: pal ? pal.hex : '#ffffff' });
+      const info = State.types.get(newType);
+      newTypes.set(newType, { count: 0, color: info ? info.color : '#ffffff' });
     }
   }
 
-  // Remap cells (also bake overrides)
+  // Tìm / tạo type theo đúng màu (cho cell override) — không map vào palette nữa
+  const colorToType = (color) => {
+    const c = color.toLowerCase();
+    for (const [t, info] of newTypes) if (info.color.toLowerCase() === c) return t;
+    const id = nextCustomTypeId(newTypes);
+    newTypes.set(id, { count: 0, color: c });
+    return id;
+  };
+
+  // Remap cells (bake overrides bằng đúng màu thật)
   State.cells = State.cells.map(c => {
     const overrideColor = State.cellOverrides.get(`${c.x},${c.y}`);
     const effectiveType = overrideColor
-      ? (() => { const pal = nearestPalette(overrideColor); return pal.type; })()
+      ? colorToType(overrideColor)
       : (remap.has(c.type) ? remap.get(c.type) : c.type);
     return { ...c, type: effectiveType };
   });
@@ -704,6 +1030,8 @@ function applyManualGrouping() {
   typeManualMap.clear();
 
   buildTypeList();
+  buildPaintTypeList();
+  buildExpandFillOptions();
   renderMap();
   showGroupStatus(`✓ Đã áp dụng → ${State.types.size} types`);
   generateAndShowJSON();
@@ -780,6 +1108,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('btn-apply-group').addEventListener('click', applyManualGrouping);
+
+  // Expand grid buttons (count > 0: thêm, count < 0: xoá)
+  document.querySelectorAll('[data-expand]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const dir = btn.dataset.expand;
+      const raw = parseInt(document.getElementById('expand-count').value, 10);
+      const count = isNaN(raw) || raw === 0 ? 1 : raw;
+      const fillType = parseInt(document.getElementById('expand-fill-type').value, 10);
+      expandGrid(dir, count, isNaN(fillType) ? 0 : fillType);
+    });
+  });
 
   // Copy / Download updated JSON
   document.getElementById('btn-copy-json').addEventListener('click', () => {
