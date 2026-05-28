@@ -50,8 +50,20 @@
   .section-label { font-size: 11px; color: #777; }
 
   #log { margin-top: 16px; background: #111827; border-radius: 8px; padding: 12px;
-         font-size: 12px; color: #6ee7b7; min-height: 40px; max-height: 120px; overflow-y: auto; }
+         font-size: 12px; color: #6ee7b7; min-height: 40px; max-height: 200px; overflow-y: auto; white-space: pre-wrap; }
   #info { text-align:center; color:#6b7280; font-size:13px; margin-bottom:8px; }
+
+  /* Folder picker section */
+  #folder-section { background:#13132a; border:1px solid #2d2d4e; border-radius:8px; padding:12px 14px; margin-bottom:14px; }
+  .folder-title { font-size:12px; color:#a78bfa; font-weight:bold; letter-spacing:1px; margin-bottom:10px; }
+  .folder-grid { display:grid; grid-template-columns: 160px 1fr 160px 1fr; gap:8px 12px; align-items:center; }
+  .btn-folder { padding:6px 10px; background:#374151; color:#c4b5fd; border:1px solid #4b5563; border-radius:5px; cursor:pointer; font-size:12px; font-weight:600; }
+  .btn-folder:hover { background:#4b5563; }
+  .folder-status { font-size:12px; color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .folder-status.picked { color:#6ee7b7; }
+  .folder-hint { font-size:11px; color:#6b7280; margin-top:8px; }
+  .btn-replace { background:#dc2626; color:white; }
+  .btn-replace:hover { background:#b91c1c; }
 </style>
 </head>
 <body>
@@ -69,6 +81,22 @@
 
 <div id="info">Chưa load JSON — đang dùng 19 màu mặc định (ETypeColor 0–18)</div>
 
+<!-- ── Folder picker (replace trực tiếp vào project) ── -->
+<div id="folder-section">
+  <div class="folder-title">📁 Replace trực tiếp vào folder (Chrome/Edge) — tùy chọn</div>
+  <div class="folder-grid">
+    <button class="btn-folder" onclick="pickFolder('pixel','Pixel_MAT')">📂 Pixel_MAT</button>
+    <span id="folder-pixel" class="folder-status">Chưa chọn</span>
+    <button class="btn-folder" onclick="pickFolder('blocker','Blocker_MAT')">📂 Blocker_MAT</button>
+    <span id="folder-blocker" class="folder-status">Chưa chọn</span>
+    <button class="btn-folder" onclick="pickFolder('outline','OutLine')">📂 OutLine</button>
+    <span id="folder-outline" class="folder-status">Chưa chọn</span>
+    <button class="btn-folder" onclick="pickFolder('break','BreakMAT')">📂 BreakMAT</button>
+    <span id="folder-break" class="folder-status">Chưa chọn</span>
+  </div>
+  <div class="folder-hint">Chỉ ghi đè/tạo file trong folder bạn cấp quyền. Bỏ chọn folder = bỏ qua loại đó.</div>
+</div>
+
 <div class="actions">
   <button class="btn btn-reset" onclick="resetColors()">↺ Reset Colors</button>
   <button class="btn btn-bright" onclick="brightenBlocker(0.10)">☀ Blocker +10% Sáng</button>
@@ -78,6 +106,7 @@
   <button class="btn btn-bright" onclick="desaturateBrights(0.50, 0.15)" style="background:#1e1a2e;color:#c4b5fd" title="Màu có L>50%: giảm saturation -15% để bớt chói, giữ nguyên lightness">🔇 Giảm chói sáng (-15%S)</button>
   <button class="btn btn-add" onclick="addRow()">＋ Thêm type thủ công</button>
   <button class="btn btn-gen" onclick="generateZip()">⬇ Generate &amp; Download ZIP</button>
+  <button class="btn btn-replace" onclick="replaceInFolders()">🔄 Replace vào folders đã chọn</button>
 </div>
 
 <table id="colTable">
@@ -109,6 +138,7 @@
 
 <div class="actions">
   <button class="btn btn-gen" onclick="generateZip()">⬇ Generate &amp; Download ZIP</button>
+  <button class="btn btn-replace" onclick="replaceInFolders()">🔄 Replace vào folders đã chọn</button>
 </div>
 <div id="log">Chưa load file JSON. Đang dùng 19 màu mặc định (ETypeColor 0–18).</div>
 
@@ -124,79 +154,79 @@ const COLOR_PRESETS = {
   // bBase/bShadow/bHL/bHL2 = pixel colors với HSL lightness +10% (giữ hue & saturation, chỉ tươi nhẹ hơn)
   // name dùng để đặt tên file: Pixel_{Name}_MAT.mtl
   // oBase = pixel base darkened 50% HSL; brTint/brShadow/brHL = break particle colors
-  0:  { name:'Black',        pBase:'#09091f', pShadow:'#09091f', pHL:'#09091f',  pHL2:'#7a7a7a', pLS:0.9,
+  0:  { name:'Color_0',       pBase:'#09091f', pShadow:'#09091f', pHL:'#09091f',  pHL2:'#7a7a7a', pLS:0.9,
         bBase:'#141447', bShadow:'#141447', bHL:'#141447', bHL2:'#949494', bLS:1.0,
         oBase:'#050510', oAlpha:125,
         brTint:'#2a2a7e', brShadow:'#03030c', brHL:'#424299' },
-  1:  { name:'Blue',         pBase:'#1f3466', pShadow:'#152b61', pHL:'#1f3466',  pHL2:'#1b3272', pLS:0.9,
+  1:  { name:'Color_1',       pBase:'#1f3466', pShadow:'#152b61', pHL:'#1f3466',  pHL2:'#1b3272', pLS:0.9,
         bBase:'#2b488d', bShadow:'#1e3e8b', bHL:'#2b488d', bHL2:'#25449b', bLS:1.0,
         oBase:'#0f1a33', oAlpha:125,
         brTint:'#466abf', brShadow:'#142858', brHL:'#768cc2' },
-  2:  { name:'Brown',        pBase:'#b38254', pShadow:'#704720', pHL:'#b38254',  pHL2:'#b38254', pLS:0.9,
+  2:  { name:'Color_2',       pBase:'#b38254', pShadow:'#704720', pHL:'#b38254',  pHL2:'#b38254', pLS:0.9,
         bBase:'#c39c77', bShadow:'#98602b', bHL:'#c39c77', bHL2:'#c39c77', bLS:1.0,
         oBase:'#5b4128', oAlpha:125,
         brTint:'#d7c3af', brShadow:'#b0753d', brHL:'#e5dcd5' },
-  3:  { name:'Cyan',         pBase:'#2a9caa', pShadow:'#249290', pHL:'#33aab9',  pHL2:'#276b74', pLS:0.9,
+  3:  { name:'Color_3',       pBase:'#2a9caa', pShadow:'#249290', pHL:'#33aab9',  pHL2:'#276b74', pLS:0.9,
         bBase:'#39bece', bShadow:'#2ebbb8', bHL:'#50c1cf', bHL2:'#348e9a', bLS:1.0,
         oBase:'#154e55', oAlpha:125,
         brTint:'#7bcfd9', brShadow:'#1c919f', brHL:'#a8d8de' },
-  4:  { name:'Green',        pBase:'#76d236', pShadow:'#4cbd00', pHL:'#7add35',  pHL2:'#3f6d1f', pLS:0.9,
+  4:  { name:'Color_4',       pBase:'#76d236', pShadow:'#4cbd00', pHL:'#7add35',  pHL2:'#3f6d1f', pLS:0.9,
         bBase:'#92db60', bShadow:'#61f000', bHL:'#97e461', bHL2:'#56952a', bLS:1.0,
         oBase:'#3a6c18', oAlpha:125,
         brTint:'#bee6a1', brShadow:'#68cf20', brHL:'#daeecd' },
-  5:  { name:'Orange',       pBase:'#fbab2f', pShadow:'#c74a03', pHL:'#fbab2f',  pHL2:'#8b611f', pLS:0.9,
+  5:  { name:'Color_5',       pBase:'#fbab2f', pShadow:'#c74a03', pHL:'#fbab2f',  pHL2:'#8b611f', pLS:0.9,
         bBase:'#fcbf61', bShadow:'#f95d04', bHL:'#fcbf61', bHL2:'#b57e28', bLS:1.0,
         oBase:'#925a03', oAlpha:125,
         brTint:'#fbddae', brShadow:'#ffa211', brHL:'#fcf1e1' },
-  6:  { name:'Pink',         pBase:'#ff5e9a', pShadow:'#b93f6e', pHL:'#fb83b0',  pHL2:'#ac4f72', pLS:0.9,
+  6:  { name:'Color_6',       pBase:'#ff5e9a', pShadow:'#b93f6e', pHL:'#fb83b0',  pHL2:'#ac4f72', pLS:0.9,
         bBase:'#ff91ba', bShadow:'#c9628a', bHL:'#fdb4cf', bHL2:'#be708d', bLS:1.0,
         oBase:'#af0041', oAlpha:125,
         brTint:'#fedeea', brShadow:'#ff448a', brHL:'#ffeef5' },
-  7:  { name:'Purple',       pBase:'#653c9f', pShadow:'#4b287e', pHL:'#653c9f',  pHL2:'#765aa2', pLS:0.9,
+  7:  { name:'Color_7',       pBase:'#653c9f', pShadow:'#4b287e', pHL:'#653c9f',  pHL2:'#765aa2', pLS:0.9,
         bBase:'#7e51bd', bShadow:'#6234a5', bHL:'#7e51bd', bHL2:'#917ab5', bLS:1.0,
         oBase:'#321e50', oAlpha:125,
         brTint:'#a88cce', brShadow:'#582b96', brHL:'#c4b6d8' },
-  8:  { name:'Red',          pBase:'#b92821', pShadow:'#8f2621', pHL:'#e43630',  pHL2:'#ff9591', pLS:0.9,
+  8:  { name:'Color_8',       pBase:'#b92821', pShadow:'#8f2621', pHL:'#e43630',  pHL2:'#ff9591', pLS:0.9,
         bBase:'#db3a32', bShadow:'#b8312b', bHL:'#ea625d', bHL2:'#ffc6c4', bLS:1.0,
         oBase:'#5d1410', oAlpha:125,
         brTint:'#e27c78', brShadow:'#ad1b14', brHL:'#e5aaa7' },
-  9:  { name:'White',        pBase:'#faffff', pShadow:'#faffff', pHL:'#faffff',  pHL2:'#faffff', pLS:0.9,
+  9:  { name:'Color_9',       pBase:'#faffff', pShadow:'#faffff', pHL:'#faffff',  pHL2:'#faffff', pLS:0.9,
         bBase:'#ffffff', bShadow:'#ffffff', bHL:'#ffffff', bHL2:'#ffffff', bLS:1.0,
         oBase:'#aaaaaa', oAlpha:125,
         brTint:'#ffffff', brShadow:'#e1ffff', brHL:'#ffffff' },
-  10: { name:'Yellow',       pBase:'#d1a023', pShadow:'#c58029', pHL:'#f9e557',  pHL2:'#3d3814', pLS:0.9,
+  10: { name:'Color_10',      pBase:'#d1a023', pShadow:'#c58029', pHL:'#f9e557',  pHL2:'#3d3814', pLS:0.9,
         bBase:'#e0b547', bShadow:'#d99948', bHL:'#fbed88', bHL2:'#635b21', bLS:1.0,
         oBase:'#695011', oAlpha:125,
         brTint:'#e8ce8c', brShadow:'#c69414', brHL:'#ecdebb' },
-  11: { name:'Beige',        pBase:'#666770', pShadow:'#4e4f55', pHL:'#666770',  pHL2:'#666770', pLS:0.9,
+  11: { name:'Color_11',      pBase:'#666770', pShadow:'#4e4f55', pHL:'#666770',  pHL2:'#666770', pLS:0.9,
         bBase:'#7f808a', bShadow:'#666870', bHL:'#7f808a', bHL2:'#7f808a', bLS:1.0,
         oBase:'#333438', oAlpha:125,
         brTint:'#ababab', brShadow:'#50536c', brHL:'#c4c4c4' },
-  12: { name:'Dark_Pink',    pBase:'#c4165a', pShadow:'#8c0e3e', pHL:'#e03475',  pHL2:'#f07aaa', pLS:0.9,
+  12: { name:'Color_12',      pBase:'#c4165a', pShadow:'#8c0e3e', pHL:'#e03475',  pHL2:'#f07aaa', pLS:0.9,
         bBase:'#e72671', bShadow:'#ba1353', bHL:'#e76093', bHL2:'#f5a8c7', bLS:1.0,
         oBase:'#620b2d', oAlpha:125,
         brTint:'#ea6f9f', brShadow:'#b70a4d', brHL:'#eba1be' },
-  13: { name:'Light_Purple', pBase:'#a86dd4', pShadow:'#7a44aa', pHL:'#c490e8',  pHL2:'#dbb8f5', pLS:0.9,
+  13: { name:'Color_13',      pBase:'#a86dd4', pShadow:'#7a44aa', pHL:'#c490e8',  pHL2:'#dbb8f5', pLS:0.9,
         bBase:'#bf94e0', bShadow:'#9361c0', bHL:'#dabaf1', bHL2:'#f2e5fb', bLS:1.0,
         oBase:'#57257c', oAlpha:125,
         brTint:'#e2d1ef', brShadow:'#9e4fd9', brHL:'#f5eefb' },
-  14: { name:'Light_Orange', pBase:'#ffcc55', pShadow:'#e09020', pHL:'#ffe080',  pHL2:'#fff3c0', pLS:0.9,
+  14: { name:'Color_14',      pBase:'#ffcc55', pShadow:'#e09020', pHL:'#ffe080',  pHL2:'#fff3c0', pLS:0.9,
         bBase:'#ffdb88', bShadow:'#e6a64d', bHL:'#ffecb3', bHL2:'#fffdf3', bLS:1.0,
         oBase:'#aa7700', oAlpha:125,
         brTint:'#fef2d6', brShadow:'#ffc43b', brHL:'#fff9ed' },
-  15: { name:'Light_Green',  pBase:'#32a800', pShadow:'#326708', pHL:'#50d020',  pHL2:'#32c24b', pLS:1.1,
+  15: { name:'Color_15',      pBase:'#32a800', pShadow:'#326708', pHL:'#50d020',  pHL2:'#32c24b', pLS:1.1,
         bBase:'#41db00', bShadow:'#49960c', bHL:'#6de241', bHL2:'#54d36a', bLS:1.1,
         oBase:'#195400', oAlpha:125,
         brTint:'#6bfa2e', brShadow:'#2a8f00', brHL:'#91f368' },
-  16: { name:'Dark_Orange',  pBase:'#cc4400', pShadow:'#882200', pHL:'#ee6622',  pHL2:'#ff9966', pLS:0.9,
+  16: { name:'Color_16',      pBase:'#cc4400', pShadow:'#882200', pHL:'#ee6622',  pHL2:'#ff9966', pLS:0.9,
         bBase:'#ff5500', bShadow:'#bb2f00', bHL:'#f28751', bHL2:'#ffbb99', bLS:1.0,
         oBase:'#662200', oAlpha:125,
         brTint:'#fb8951', brShadow:'#b33c00', brHL:'#f5ad89' },
-  17: { name:'Dark_Cyan',    pBase:'#007788', pShadow:'#004455', pHL:'#009eaa',  pHL2:'#00ccd8', pLS:0.9,
+  17: { name:'Color_17',      pBase:'#007788', pShadow:'#004455', pHL:'#009eaa',  pHL2:'#00ccd8', pLS:0.9,
         bBase:'#00a4bb', bShadow:'#006d88', bHL:'#00cddd', bHL2:'#0cf2ff', bLS:1.0,
         oBase:'#003b44', oAlpha:125,
         brTint:'#0fdcf9', brShadow:'#00616f', brHL:'#4adcf0' },
-  18: { name:'Dark_Purple',  pBase:'#3d1a6e', pShadow:'#2a0e50', pHL:'#5c2ea0',  pHL2:'#8855cc', pLS:0.9,
+  18: { name:'Color_18',      pBase:'#3d1a6e', pShadow:'#2a0e50', pHL:'#5c2ea0',  pHL2:'#8855cc', pLS:0.9,
         bBase:'#542497', bShadow:'#41167b', bHL:'#733ac7', bHL2:'#a37cd8', bLS:1.0,
         oBase:'#1e0d37', oAlpha:125,
         brTint:'#783eca', brShadow:'#31105f', brHL:'#9670cb' },
@@ -371,14 +401,16 @@ function handleFileInput(inp) {
 /** Tạo preset từ 1 màu base hex (dùng khi đọc colorMapping từ JSON) */
 function presetFromColor(name, hex) {
   const [h,s,l] = hexToHsl(hex);
+  // 3D shading nhẹ: highlight chỉ +6% L (đủ loé), shadow -10% L (đủ chiều sâu)
+  // Kết hợp highlightIntensity 0.3/0.45 trong template → trung bình ≈ base, vẫn nổi khối
   const pBase   = hex;
-  const pShadow = hslToHex(h, Math.min(1,s+0.08), Math.max(0,l-0.12));
-  const pHL     = hslToHex(h, Math.max(0,s-0.05), Math.min(1,l+0.12));
-  const pHL2    = hslToHex(h, Math.max(0,s-0.08), Math.max(0,l-0.06));
-  const bBase   = hslToHex(h, s, Math.min(1,l+0.10));
-  const bShadow = hslToHex(h, Math.min(1,s+0.08), Math.max(0,l-0.02));
-  const bHL     = hslToHex(h, Math.max(0,s-0.05), Math.min(1,l+0.18));
-  const bHL2    = hslToHex(h, Math.max(0,s-0.10), Math.min(1,l+0.22));
+  const pShadow = hslToHex(h, Math.min(1,s+0.05), Math.max(0,l-0.10));
+  const pHL     = hslToHex(h, Math.max(0,s-0.03), Math.min(1,l+0.06));
+  const pHL2    = pShadow;                          // = shadow (khớp hardcode trong template)
+  const bBase   = pBase;
+  const bShadow = pShadow;
+  const bHL     = pHL;
+  const bHL2    = pShadow;
   const oBase   = hslToHex(h, s, l*0.5);
   const brTint   = hslToHex(h, Math.max(0,s-0.05), Math.min(1,l+0.25));
   const brShadow = hslToHex(h, Math.min(1,s+0.10), Math.max(0,l-0.05));
@@ -441,21 +473,16 @@ function loadJsonFile(file) {
   reader.readAsText(file);
 }
 
-/** Đoán tên màu từ typeId (dùng ETypeColor nếu khớp, không thì Type_N) */
+/** Tên màu generic theo typeId — khớp với ETypeColor.COLOR_N */
 function guessColorName(typeId, hex) {
-  const ETYPE_NAMES = {
-    0:'Black',1:'Blue',2:'Brown',3:'Cyan',4:'Green',5:'Orange',6:'Pink',
-    7:'Purple',8:'Red',9:'White',10:'Yellow',11:'Beige',
-    12:'Dark_Pink',13:'Light_Purple',14:'Light_Orange',15:'Light_Green',
-    16:'Dark_Orange',17:'Dark_Cyan',18:'Dark_Purple'
-  };
-  return ETYPE_NAMES[typeId] ?? 'Type_'+typeId;
+  return 'Color_' + typeId;
 }
 
 // ── Material templates ────────────────────────────────────────────────────────
 function cc(r,g,b){ return {"__type__":"cc.Color","r":r,"g":g,"b":b,"a":255}; }
 
 function makePixelMat(base,shadow,hl,hl2,ls) {
+  // Pixel render = đúng baseColor: highlightIntensity = 0 để tắt specular bloom
   return {
     "__type__":"cc.Material","_name":"","_objFlags":0,"__editorExtras__":{},"_native":"",
     "_effectAsset":{"__uuid__":"477675d3-333f-4b6a-be96-02d2e3ef36f9","__expectedType__":"cc.EffectAsset"},
@@ -467,21 +494,24 @@ function makePixelMat(base,shadow,hl,hl2,ls) {
     ],
     "_props":[{
       "baseColor":cc(base.r,base.g,base.b),
-      "lightStrength":ls,
       "shadowColor":cc(shadow.r,shadow.g,shadow.b),
-      "shadowSoftness":-0.33,"shadowThreshold":1.13,
+      "shadowSoftness":0.07,
+      "shadowThreshold":2,
       "highlightColor":cc(hl.r,hl.g,hl.b),
-      "highlightIntensity":0.5,"specSize":6,
-      "vector3":{"__type__":"cc.Vec4","x":7,"y":50,"z":0,"w":0},
+      "highlightIntensity":0.3,
+      "specSize":32.6,
+      "vector3":{"__type__":"cc.Vec4","x":34.1,"y":108.9,"z":57.8,"w":0},
       "enableSecondFakeSpecular":1,
-      "vector3_2":{"__type__":"cc.Vec4","x":7,"y":57.8,"z":72.1,"w":0},
-      "highlightColor2":cc(hl2.r,hl2.g,hl2.b),
-      "highlightIntensity2":0.5,"specSize2":11.1
+      "vector3_2":{"__type__":"cc.Vec4","x":-12.6,"y":168.6,"z":1.3,"w":0},
+      "highlightColor2":cc(shadow.r,shadow.g,shadow.b),
+      "highlightIntensity2":0.45,
+      "specSize2":3
     },{}]
   };
 }
 
 function makeBlockerMat(base,shadow,hl,hl2,ls) {
+  // Blocker render = đúng baseColor: highlightIntensity = 0 để tắt specular bloom
   return {
     "__type__":"cc.Material","_name":"","_objFlags":0,"__editorExtras__":{},"_native":"",
     "_effectAsset":{"__uuid__":"477675d3-333f-4b6a-be96-02d2e3ef36f9","__expectedType__":"cc.EffectAsset"},
@@ -493,15 +523,18 @@ function makeBlockerMat(base,shadow,hl,hl2,ls) {
     ],
     "_props":[{
       "baseColor":cc(base.r,base.g,base.b),
-      "lightStrength":ls,
       "shadowColor":cc(shadow.r,shadow.g,shadow.b),
-      "shadowSoftness":0.07,"shadowThreshold":2,
+      "shadowSoftness":0.07,
+      "shadowThreshold":2,
       "highlightColor":cc(hl.r,hl.g,hl.b),
-      "highlightIntensity":0.4,"specSize":32.6,
+      "highlightIntensity":0.3,
+      "specSize":32.6,
       "vector3":{"__type__":"cc.Vec4","x":34.1,"y":108.9,"z":57.8,"w":0},
-      "vector3_2":{"__type__":"cc.Vec4","x":34.1,"y":176.2,"z":0,"w":0},
-      "highlightColor2":cc(hl2.r,hl2.g,hl2.b),
-      "highlightIntensity2":0.6
+      "enableSecondFakeSpecular":1,
+      "vector3_2":{"__type__":"cc.Vec4","x":-12.6,"y":168.6,"z":1.3,"w":0},
+      "highlightColor2":cc(shadow.r,shadow.g,shadow.b),
+      "highlightIntensity2":0.45,
+      "specSize2":3
     },{"shadowOffsetX":0,"shadowOffsetZ":0}]
   };
 }
@@ -587,50 +620,56 @@ function makeOutlineMat(c, a) {
   };
 }
 
+// ── Build 4 file contents cho 1 typeId (dùng chung cho ZIP & Replace) ─────────
+function buildFilesForType(typeId) {
+  const name    = (document.getElementById('name_'+typeId)?.value || 'Type_'+typeId).trim();
+  const capName = name.charAt(0).toUpperCase() + name.slice(1);
+
+  const pBase   = hexToRgb(document.getElementById('pBase_'+typeId)?.value||'#888');
+  const pShadow = hexToRgb(document.getElementById('pShadow_'+typeId)?.value||'#555');
+  const pHL     = hexToRgb(document.getElementById('pHL_'+typeId)?.value||'#aaa');
+  const pHL2    = hexToRgb(document.getElementById('pHL2_'+typeId)?.value||'#ccc');
+  const pLS     = parseFloat(document.getElementById('pLS_'+typeId)?.value)||0.9;
+
+  const bBase   = hexToRgb(document.getElementById('bBase_'+typeId)?.value||'#888');
+  const bShadow = hexToRgb(document.getElementById('bShadow_'+typeId)?.value||'#555');
+  const bHL     = hexToRgb(document.getElementById('bHL_'+typeId)?.value||'#aaa');
+  const bHL2    = hexToRgb(document.getElementById('bHL2_'+typeId)?.value||'#ccc');
+  const bLS     = parseFloat(document.getElementById('bLS_'+typeId)?.value)||1.0;
+
+  const oBase   = hexToRgb(document.getElementById('oBase_'+typeId)?.value||'#333');
+  const oAlpha  = parseInt(document.getElementById('oAlpha_'+typeId)?.value)||125;
+
+  const brTint   = hexToRgb(document.getElementById('brTint_'+typeId)?.value||'#888');
+  const brShadow = hexToRgb(document.getElementById('brShadow_'+typeId)?.value||'#555');
+  const brHL     = hexToRgb(document.getElementById('brHL_'+typeId)?.value||'#aaa');
+
+  return {
+    pixel:   { name: `Pixel_${capName}_MAT.mtl`,   content: JSON.stringify(makePixelMat(pBase,pShadow,pHL,pHL2,pLS), null, 2) },
+    blocker: { name: `Blocker_${capName}_MAT.mtl`, content: JSON.stringify(makeBlockerMat(bBase,bShadow,bHL,bHL2,bLS), null, 2) },
+    outline: { name: `${name.toUpperCase()}.mtl`,  content: JSON.stringify(makeOutlineMat(oBase, oAlpha), null, 2) },
+    break:   { name: `B_${capName}_MAT.mtl`,       content: JSON.stringify(makeBreakMat(brTint, brShadow, brHL), null, 2) },
+  };
+}
+
 // ── Generate ZIP ──────────────────────────────────────────────────────────────
 async function generateZip() {
   const zip = new JSZip();
-  const pixelFolder   = zip.folder("Pixel_MAT");
-  const blockerFolder = zip.folder("Blocker_MAT");
-  const outlineFolder = zip.folder("OutLine");
-  const breakFolder   = zip.folder("BreakMAT");
+  const folders = {
+    pixel:   zip.folder("Pixel_MAT"),
+    blocker: zip.folder("Blocker_MAT"),
+    outline: zip.folder("OutLine"),
+    break:   zip.folder("BreakMAT"),
+  };
   const log = document.getElementById('log');
   log.textContent = '';
 
   for(const typeId of _activeTypes) {
-    const name    = (document.getElementById('name_'+typeId)?.value || 'Type_'+typeId).trim();
-    const capName = name.charAt(0).toUpperCase() + name.slice(1);
-
-    const pBase   = hexToRgb(document.getElementById('pBase_'+typeId)?.value||'#888');
-    const pShadow = hexToRgb(document.getElementById('pShadow_'+typeId)?.value||'#555');
-    const pHL     = hexToRgb(document.getElementById('pHL_'+typeId)?.value||'#aaa');
-    const pHL2    = hexToRgb(document.getElementById('pHL2_'+typeId)?.value||'#ccc');
-    const pLS     = parseFloat(document.getElementById('pLS_'+typeId)?.value)||0.9;
-
-    const bBase   = hexToRgb(document.getElementById('bBase_'+typeId)?.value||'#888');
-    const bShadow = hexToRgb(document.getElementById('bShadow_'+typeId)?.value||'#555');
-    const bHL     = hexToRgb(document.getElementById('bHL_'+typeId)?.value||'#aaa');
-    const bHL2    = hexToRgb(document.getElementById('bHL2_'+typeId)?.value||'#ccc');
-    const bLS     = parseFloat(document.getElementById('bLS_'+typeId)?.value)||1.0;
-
-    const oBase   = hexToRgb(document.getElementById('oBase_'+typeId)?.value||'#333');
-    const oAlpha  = parseInt(document.getElementById('oAlpha_'+typeId)?.value)||125;
-
-    const brTint   = hexToRgb(document.getElementById('brTint_'+typeId)?.value||'#888');
-    const brShadow = hexToRgb(document.getElementById('brShadow_'+typeId)?.value||'#555');
-    const brHL     = hexToRgb(document.getElementById('brHL_'+typeId)?.value||'#aaa');
-
-    const pName  = `Pixel_${capName}_MAT.mtl`;
-    const bName  = `Blocker_${capName}_MAT.mtl`;
-    const oName  = `${name.toUpperCase()}.mtl`;
-    const brName = `B_${capName}_MAT.mtl`;
-
-    pixelFolder.file(pName,   JSON.stringify(makePixelMat(pBase,pShadow,pHL,pHL2,pLS),    null,2));
-    blockerFolder.file(bName, JSON.stringify(makeBlockerMat(bBase,bShadow,bHL,bHL2,bLS),  null,2));
-    outlineFolder.file(oName, JSON.stringify(makeOutlineMat(oBase, oAlpha),                null,2));
-    breakFolder.file(brName,  JSON.stringify(makeBreakMat(brTint, brShadow, brHL),         null,2));
-
-    log.textContent += `[Type ${typeId}] ${pName}  |  ${bName}  |  ${oName}  |  ${brName}\n`;
+    const files = buildFilesForType(typeId);
+    for (const k of ['pixel','blocker','outline','break']) {
+      folders[k].file(files[k].name, files[k].content);
+    }
+    log.textContent += `[Type ${typeId}] ${files.pixel.name}  |  ${files.blocker.name}  |  ${files.outline.name}  |  ${files.break.name}\n`;
   }
 
   log.textContent += `\nGenerating ZIP (${_activeTypes.length * 4} files)...`;
@@ -640,6 +679,67 @@ async function generateZip() {
   a.href=url; a.download='PixelBlask_Materials.zip'; a.click();
   URL.revokeObjectURL(url);
   log.textContent += `\n✅ Done! ${_activeTypes.length * 4} files generated (Pixel + Blocker + OutLine + BreakMAT).`;
+}
+
+// ── Folder picker + Replace trực tiếp (File System Access API) ────────────────
+const folderHandles = { pixel:null, blocker:null, outline:null, break:null };
+
+async function pickFolder(key, displayName) {
+  if (!window.showDirectoryPicker) {
+    alert('Browser này không hỗ trợ File System Access API. Dùng Chrome/Edge mới nhất.');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode:'readwrite' });
+    folderHandles[key] = handle;
+    const el = document.getElementById('folder-'+key);
+    el.textContent = `✅ ${handle.name}`;
+    el.classList.add('picked');
+    el.title = `${displayName}: ${handle.name}`;
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      alert('Lỗi pick folder: ' + err.message);
+    }
+  }
+}
+
+async function writeToHandle(dirHandle, fileName, content) {
+  const fileHandle = await dirHandle.getFileHandle(fileName, { create:true });
+  // Yêu cầu lại quyền nếu cần
+  if (fileHandle.requestPermission) {
+    const perm = await fileHandle.requestPermission({ mode:'readwrite' });
+    if (perm !== 'granted') throw new Error('Không có quyền ghi file');
+  }
+  const writable = await fileHandle.createWritable();
+  await writable.write(content);
+  await writable.close();
+}
+
+async function replaceInFolders() {
+  const anyPicked = ['pixel','blocker','outline','break'].some(k => folderHandles[k]);
+  if (!anyPicked) {
+    alert('Chưa chọn folder nào! Bấm nút 📂 ở panel trên để chọn folder.');
+    return;
+  }
+  const log = document.getElementById('log');
+  log.textContent = '';
+  let ok = 0, skip = 0, err = 0;
+
+  for(const typeId of _activeTypes) {
+    const files = buildFilesForType(typeId);
+    for (const k of ['pixel','blocker','outline','break']) {
+      if (!folderHandles[k]) { skip++; continue; }
+      try {
+        await writeToHandle(folderHandles[k], files[k].name, files[k].content);
+        ok++;
+        log.textContent += `✅ [${k}] ${files[k].name}\n`;
+      } catch (e) {
+        err++;
+        log.textContent += `❌ [${k}] ${files[k].name} — ${e.message}\n`;
+      }
+    }
+  }
+  log.textContent += `\n🔄 Replace xong: ${ok} file ghi, ${skip} bỏ qua (folder chưa chọn), ${err} lỗi.`;
 }
 
 // ── Init: default 19 colors (ETypeColor 0–18) ────────────────────────────────
